@@ -169,6 +169,7 @@ function getLastLoggedDetail(name,history){
     const ast=ex.sets.filter(s=>s.assist!==undefined&&s.reps);
     const bil=ex.sets.filter(s=>s.weight&&Number(s.weight)>0&&s.reps);
     const rng=ex.sets.filter(s=>s.rung!==undefined&&s.rung!==""&&s.duration);
+    if(BODYWEIGHT_EXERCISES.has(name)){const bw=ex.sets.filter(s=>s.reps);if(bw.length)return{type:"bw",sets:bw.map(s=>({reps:s.reps}))};}
     if(rng.length)return{type:"rung",sets:rng.map(s=>({rung:s.rung,dur:s.duration}))};
     if(uni.length)return{type:"uni",sets:uni.map(s=>({L:s.weightL||"—",R:s.weightR||"—",rL:s.repsL||"—",rR:s.repsR||"—"}))};
     if(ast.length)return{type:"assist",sets:ast.map(s=>({assist:s.assist||"0",reps:s.reps}))};
@@ -750,11 +751,18 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
     const swapFloor=(!isNowUni&&!isNowAssist&&!isNowCardio&&!TIMED_EXERCISES.has(newEx)&&!BODYWEIGHT_EXERCISES.has(newEx))?getLastSessionMaxWeight(newEx,history):0;
     // Always rebuild sets based on what the NEW exercise needs, preserving values where possible
     const newSets=exercise.sets.map(s=>{
-      if(isNowCardio){
+      if(RUNG_EXERCISES.has(newEx)){
+        return{id:s.id,rung:"",duration:""};
+      } else if(isNowCardio){
         return isBWCardio?{id:s.id,duration:""}:{id:s.id,duration:"",resistance:""};
+      } else if(TIMED_EXERCISES.has(newEx)){
+        return{id:s.id,duration:""};
       } else if(isNowAssist){
         const r=s.reps||s.repsL||s.repsR||"";
         return{id:s.id,assist:"",reps:r};
+      } else if(BODYWEIGHT_EXERCISES.has(newEx)){
+        const r=s.reps||s.repsL||s.repsR||"";
+        return{id:s.id,weight:"",reps:r};
       } else if(isNowUni){
         const w=s.weight||s.weightL||"";const r=s.reps||s.repsL||"";
         return{id:s.id,weightL:w,weightR:w,repsL:r,repsR:r};
@@ -811,7 +819,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
           AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
           AI TARGET: {exercise.aiReps} reps bodyweight
