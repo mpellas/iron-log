@@ -1298,6 +1298,7 @@ function GymTracker(){
   const _draft=loadDraftSession();
   const [exercises,setExercises]=useState(_draft?.exercises||[]);
   const [loadedFromAI,setLoadedFromAI]=useState(_draft?.loadedFromAI||false);
+  const [manualAdd,setManualAdd]=useState(false);
   const [selectedMuscle,setSelectedMuscle]=useState("Chest");
   const [selectedExercise,setSelectedExercise]=useState(getMergedLibrary()["Chest"][0]);
   const [note,setNote]=useState(_draft?.note||"");
@@ -1351,7 +1352,7 @@ function GymTracker(){
     const updated=[entry,...history];
     setHistory(updated);saveHistory(updated);
     if(navigator.vibrate)navigator.vibrate([40,30,40]);
-    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setFocusOverride(null);clearDraftSession();setTab("history");
+    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setManualAdd(false);setFocusOverride(null);clearDraftSession();setTab("history");
   };
 
   const MOVEMENT_KEYWORDS=["press","row","curl","raise","fly","flye","extension","pulldown","pushdown","squat","lunge","deadlift","shrug","crunch","plank","dip","pullup","pull-up","push-up","pushup","kickback","pullover","rotation","twist","carry","hold","hang","bridge","thrust","step","jump","sprint","climb","swing","cable","machine","dumbbell","barbell","smith","incline","decline","seated","standing","single","unilateral","lateral","front","rear","reverse","close","wide","neutral","hammer","concentration","preacher","drag","zottman","overhead","underhand","overhand","Romanian","Bulgarian","Nordic","Copenhagen","Jefferson","hack","sumo","conventional","stiff","straight","lying","prone","supine","bent","arm","leg","chest","back","shoulder","bicep","tricep","glute","quad","hamstring","calf","ab","core","wrist","grip"];
@@ -1424,7 +1425,7 @@ function GymTracker(){
       loaded=aiPlan.exercises.map(ex=>parseEx(ex,null,null,null));
     }
     if(!loaded.length)return;
-    setExercises(loaded);setLoadedFromAI(true);setTab("log");
+    setExercises(loaded);setLoadedFromAI(true);setManualAdd(false);setTab("log");
   };
 
   const handlePhotoScan=async(e)=>{
@@ -1676,7 +1677,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
           <div className="section">
             {_draft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
             {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
-            {!loadedFromAI&&(
+            {(!loadedFromAI||manualAdd)&&(
               <>
                 <div className="section-label">Add Exercise</div>
                 <label className="scan-btn" style={{cursor:scanLoading?"not-allowed":"pointer",opacity:scanLoading?0.4:1}}>
@@ -1743,7 +1744,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
                     </div>
                   );
                 })}
-                {loadedFromAI&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setLoadedFromAI(false)}>+ Add another exercise manually</button>}
+                {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add another exercise manually</button>}
                 <div style={{marginBottom:10}}><textarea className="note-input" rows={2} placeholder="Session notes (optional)..." value={note} onChange={e=>setNote(e.target.value)}/></div>
                 <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={saveWorkout}>SAVE WORKOUT</button>
               </>
