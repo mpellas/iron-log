@@ -746,9 +746,9 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
     const isNowAssist=ASSISTED_EXERCISES.has(newEx);
     const isNowCardio=CARDIO_EXERCISES.has(newEx)||exercise.muscle==="Cardio";
     const isBWCardio=CARDIO_EXERCISES.has(newEx);
-    // Weight floor (parity with parseEx): for standard weight/reps targets, the carried-over
-    // weight must not sit below this exercise's last-session peak. 0 = no floor applies.
-    const swapFloor=(!isNowUni&&!isNowAssist&&!isNowCardio&&!TIMED_EXERCISES.has(newEx)&&!BODYWEIGHT_EXERCISES.has(newEx))?getLastSessionMaxWeight(newEx,history):0;
+    // Start the swapped-in exercise at YOUR last-session peak for THAT exercise — not at the
+    // weight of whatever you swapped out of (which is unrelated and often wrong). 0 = no history.
+    const newExLastMax=getLastSessionMaxWeight(newEx,history);
     // Always rebuild sets based on what the NEW exercise needs, preserving values where possible
     const newSets=exercise.sets.map(s=>{
       if(RUNG_EXERCISES.has(newEx)){
@@ -764,11 +764,12 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
         const r=s.reps||s.repsL||s.repsR||"";
         return{id:s.id,weight:"",reps:r};
       } else if(isNowUni){
-        const w=s.weight||s.weightL||"";const r=s.reps||s.repsL||"";
+        const r=s.reps||s.repsL||"";
+        const w=newExLastMax>0?String(newExLastMax):(s.weight||s.weightL||"");
         return{id:s.id,weightL:w,weightR:w,repsL:r,repsR:r};
       } else {
-        let w=s.weightL||s.weightR||s.weight||"";const r=s.repsL||s.repsR||s.reps||"";
-        if(swapFloor>0&&w!==""&&Number(w)<swapFloor)w=String(swapFloor);
+        const r=s.repsL||s.repsR||s.reps||"";
+        const w=newExLastMax>0?String(newExLastMax):(s.weightL||s.weightR||s.weight||"");
         return{id:s.id,weight:w,reps:r};
       }
     });
