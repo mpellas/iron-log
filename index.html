@@ -171,6 +171,8 @@ function getLastLoggedDetail(name,history){
     const rng=ex.sets.filter(s=>s.rung!==undefined&&s.rung!==""&&s.duration);
     if(BODYWEIGHT_EXERCISES.has(name)){const bw=ex.sets.filter(s=>s.reps);if(bw.length)return{type:"bw",sets:bw.map(s=>({reps:s.reps}))};}
     if(rng.length)return{type:"rung",sets:rng.map(s=>({rung:s.rung,dur:s.duration}))};
+    const tmd=ex.sets.filter(s=>s.duration&&s.rung===undefined&&s.weight===undefined&&s.weightL===undefined);
+    if(TIMED_EXERCISES.has(name)&&tmd.length)return{type:"timed",sets:tmd.map(s=>({dur:s.duration}))};
     if(uni.length)return{type:"uni",sets:uni.map(s=>({L:s.weightL||"—",R:s.weightR||"—",rL:s.repsL||"—",rR:s.repsR||"—"}))};
     if(ast.length)return{type:"assist",sets:ast.map(s=>({assist:s.assist||"0",reps:s.reps}))};
     if(bil.length)return{type:"bil",sets:bil.map(s=>({weight:s.weight,reps:s.reps}))};
@@ -221,7 +223,8 @@ const EXERCISE_LIBRARY={
     "Machine Chest Press",
     "Machine Incline Press",
     "Machine Decline Press",
-    "Machine Chest Fly"
+    "Machine Chest Fly",
+    "TRX Chest Press"
   ],
   Back:[
     "Barbell Row",
@@ -248,7 +251,8 @@ const EXERCISE_LIBRARY={
     "Machine Back Extension",
     "Machine Pullover",
     "Straight-Arm Pulldown",
-    "Reverse-Grip Lat Pulldown"
+    "Reverse-Grip Lat Pulldown",
+    "TRX Row"
   ],
   Shoulders:[
     "Barbell Overhead Press",
@@ -272,7 +276,8 @@ const EXERCISE_LIBRARY={
     "Machine Upright Row",
     "Dumbbell Shrugs",
     "Smith Machine Shrugs",
-    "Cable Rear Delt Fly"
+    "Cable Rear Delt Fly",
+    "TRX Y-Fly"
   ],
   Biceps:[
     "Barbell Curl",
@@ -290,7 +295,8 @@ const EXERCISE_LIBRARY={
     "Cable Preacher Curl",
     "Machine Preacher Curl",
     "Machine Bicep Curl",
-    "Machine Seated Curl"
+    "Machine Seated Curl",
+    "TRX Bicep Curl"
   ],
   Triceps:[
     "Skull Crushers",
@@ -311,7 +317,8 @@ const EXERCISE_LIBRARY={
     "Assisted Dip (Narrow Grip)",
     "Assisted Dip (Wide Grip)",
     "Assisted Dip (Neutral Grip)",
-    "Bench Dips"
+    "Bench Dips",
+    "TRX Tricep Extension"
   ],
   Forearms:[
     "Barbell Wrist Curl",
@@ -364,7 +371,9 @@ const EXERCISE_LIBRARY={
     "Machine Inner Thigh",
     "Machine Outer Thigh",
     "Smith Machine Hip Thrust",
-    "Smith Machine Calf Raise"
+    "Smith Machine Calf Raise",
+    "TRX Squat",
+    "TRX Hamstring Curl"
   ],
   Core:[
     "Plank",
@@ -389,7 +398,9 @@ const EXERCISE_LIBRARY={
     "Cable Ab Crunch",
     "Machine Torso Rotation",
     "Captain's Chair Leg Raise",
-    "Medicine Ball Slams"
+    "Medicine Ball Slams",
+    "TRX Pike",
+    "TRX Plank"
   ],
   Cardio:[
     "Treadmill",
@@ -423,6 +434,7 @@ const EXERCISE_LIBRARY={
 
 const BODYWEIGHT_EXERCISES=new Set([
   "Push-Ups","Chest Dips","Pull-Ups","Chin-Ups","Tricep Dips","Bench Dips",
+  "TRX Chest Press","TRX Row","TRX Y-Fly","TRX Bicep Curl","TRX Tricep Extension","TRX Squat","TRX Hamstring Curl","TRX Pike",
   "Plank","Side Plank","Single-Arm Plank","Crunches","Bicycle Crunches",
   "Reverse Crunches","Hanging Leg Raises","Hanging Knee Raises",
   "Ab Wheel Rollout","Dead Bug","Bird Dog","Decline Sit-Ups","Oblique Crunches",
@@ -433,6 +445,7 @@ const BODYWEIGHT_EXERCISES=new Set([
 const TIMED_EXERCISES=new Set([
   "Mountain Climbers","Plank","Side Plank","Plank Hold","Dead Hang","Farmer's Carry",
   "Wall Sit","Hollow Body Hold","Superman Hold","L-Sit",
+  "TRX Plank",
   "PF360 Pushup + Climber",
   "TRUE Stretch Routine","Shoulder Stretch","Chest Stretch","Lat Stretch","Triceps Stretch",
   "Hamstring Stretch","Hip Flexor Stretch","Quad Stretch","Calf Stretch","Glute Stretch",
@@ -729,10 +742,13 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
   const isUnilateral=isUnilateralExercise(exercise.name);
   const isAssisted=ASSISTED_EXERCISES.has(exercise.name);
   const isRung=RUNG_EXERCISES.has(exercise.name);
+  const isTimed=!isRung&&TIMED_EXERCISES.has(exercise.name);
   // Last-session peak for this exercise; used to flag (not block) any set logged below it
   const weightFloor=(!isAssisted&&!isCardio&&!TIMED_EXERCISES.has(exercise.name)&&!isBodyweight)?getLastSessionMaxWeight(exercise.name,history):0;
   const blankSet=()=>isRung
     ?{id:generateId(),rung:"",duration:""}
+    :isTimed
+    ?{id:generateId(),duration:""}
     :isCardio
     ?CARDIO_EXERCISES.has(exercise.name)?{id:generateId(),duration:""}:{id:generateId(),duration:"",resistance:""}
     :isUnilateral
@@ -820,7 +836,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
           AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
           AI TARGET: {exercise.aiReps} reps bodyweight
@@ -830,7 +846,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginBottom:3}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}</div>
-            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
+            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
           </div>
         ))}
       </div>
