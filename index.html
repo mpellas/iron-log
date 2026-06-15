@@ -1465,7 +1465,7 @@ function GymTracker(){
       const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!_unavail.includes(ex)).join(", ")}`).join("\n");
       const prompt=`Identify the gym equipment in the photo and map to this list:\n${exerciseList}\n\nRespond ONLY with JSON:\n{"identified":"short name","muscle":"exact muscle group","exercise":"exact exercise name","confidence":"high|medium|low","note":"max 10 words"}\n\nIf no gym equipment: {"identified":null,"muscle":null,"exercise":null,"confidence":"low","note":"Could not identify gym equipment."}`;
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:apiHeaders(),
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:300,
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:300,
           messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},{type:"text",text:prompt}]}]})});
       const data=await res.json();
       if(data.error){setScanResult({identified:null,note:data.error.message||"API error."});setScanLoading(false);return;}
@@ -1637,7 +1637,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:apiHeaders(),
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2048,messages:[{role:"user",content:prompt}]})});
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2048,messages:[{role:"user",content:prompt}]})});
       const data=await res.json();
       if(data.error){setAiPlan({focus:"API Error",rationale:data.error.message||"API error. Check your key.",supersets:[]});setAiLoading(false);return;}
       const rawText=data.content?.map(b=>b.text||"").join("")||"";
