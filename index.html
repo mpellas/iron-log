@@ -112,6 +112,25 @@ function toggleDifficultExercise(name){
 function loadYoutubeUrls(){try{return JSON.parse(localStorage.getItem("ironlog:ytlinks")||"{}");}catch{return{};}}
 function saveYoutubeUrl(name,url){try{const m=loadYoutubeUrls();if(url)m[name]=url;else delete m[name];localStorage.setItem("ironlog:ytlinks",JSON.stringify(m));}catch(e){}}
 function generateId(){return Math.random().toString(36).slice(2,10);}
+// Robustly extract the first balanced JSON object from an AI response — tolerant of
+// markdown fences, preamble, trailing prose (even with braces), and braces inside strings.
+// Returns the JSON substring, or null if none/unterminated (e.g. truncated response).
+function extractJsonObject(text){
+  const cleaned=(text||"").replace(/```json|```/g,"");
+  const start=cleaned.indexOf("{");
+  if(start<0)return null;
+  let depth=0,inStr=false,esc=false;
+  for(let i=start;i<cleaned.length;i++){
+    const c=cleaned[i];
+    if(esc){esc=false;continue;}
+    if(c==="\\"){esc=true;continue;}
+    if(c==='"'){inStr=!inStr;continue;}
+    if(inStr)continue;
+    if(c==="{")depth++;
+    else if(c==="}"){depth--;if(depth===0)return cleaned.slice(start,i+1);}
+  }
+  return null;
+}
 function today(){return new Date().toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});}
 function todayKey(){return new Date().toISOString().slice(0,10);}
 
@@ -1469,7 +1488,7 @@ function GymTracker(){
           messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},{type:"text",text:prompt}]}]})});
       const data=await res.json();
       if(data.error){setScanResult({identified:null,note:data.error.message||"API error."});setScanLoading(false);return;}
-      const parsed=JSON.parse((data.content?.map(b=>b.text||"").join("")||"{}").replace(/```json|```/g,"").trim());
+      const parsed=JSON.parse(extractJsonObject(data.content?.map(b=>b.text||"").join("")||"")||"{}");
       if(parsed.muscle&&parsed.exercise&&getMergedLibrary()[parsed.muscle]){setSelectedMuscle(parsed.muscle);setSelectedExercise(parsed.exercise);setScanResult(parsed);}
       else{setScanResult({identified:null,note:parsed.note||"Could not identify gym equipment."});}
     }catch(err){setScanResult({identified:null,note:`Scan failed: ${err.message}`});}
@@ -1637,13 +1656,13 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:apiHeaders(),
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2048,messages:[{role:"user",content:prompt}]})});
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4096,messages:[{role:"user",content:prompt}]})});
       const data=await res.json();
       if(data.error){setAiPlan({focus:"API Error",rationale:data.error.message||"API error. Check your key.",supersets:[]});setAiLoading(false);return;}
       const rawText=data.content?.map(b=>b.text||"").join("")||"";
-      const jsonMatch=rawText.match(/\{[\s\S]*\}/);
-      if(!jsonMatch){setAiPlan({focus:"Parse Error",rationale:"Could not read AI response. Try again.",supersets:[]});setAiLoading(false);return;}
-      const parsed=JSON.parse(jsonMatch[0]);
+      const jsonStr=extractJsonObject(rawText);
+      if(!jsonStr){setAiPlan({focus:"Parse Error",rationale:"Could not read AI response (it may have been cut off). Try again.",supersets:[]});setAiLoading(false);return;}
+      const parsed=JSON.parse(jsonStr);
       setAiPlan(parsed);
     }catch(err){setAiPlan({focus:"Error",rationale:`Something went wrong: ${err.message}. Please try again.`,supersets:[]});}
     }catch(outerErr){setAiError(`Error: ${outerErr.message}. Please try again.`);}
