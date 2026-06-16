@@ -188,6 +188,12 @@ function getLastLoggedDetail(name,history){
     const ast=ex.sets.filter(s=>s.assist!==undefined&&s.reps);
     const bil=ex.sets.filter(s=>s.weight&&Number(s.weight)>0&&s.reps);
     const rng=ex.sets.filter(s=>s.rung!==undefined&&s.rung!==""&&s.duration);
+    if(LEVEL_EXERCISES.has(name)){
+      const lvT=ex.sets.filter(s=>s.level!==undefined&&s.level!==""&&s.duration);
+      const lvR=ex.sets.filter(s=>s.level!==undefined&&s.level!==""&&s.reps);
+      if(lvT.length)return{type:"leveltimed",sets:lvT.map(s=>({lv:s.level,dur:s.duration}))};
+      if(lvR.length)return{type:"levelreps",sets:lvR.map(s=>({lv:s.level,reps:s.reps}))};
+    }
     if(BODYWEIGHT_EXERCISES.has(name)){const bw=ex.sets.filter(s=>s.reps);if(bw.length)return{type:"bw",sets:bw.map(s=>({reps:s.reps}))};}
     if(rng.length)return{type:"rung",sets:rng.map(s=>({rung:s.rung,dur:s.duration}))};
     const tmd=ex.sets.filter(s=>s.duration&&s.rung===undefined&&s.weight===undefined&&s.weightL===undefined);
@@ -419,7 +425,9 @@ const EXERCISE_LIBRARY={
     "Captain's Chair Leg Raise",
     "Medicine Ball Slams",
     "TRX Pike",
-    "TRX Plank"
+    "TRX Plank",
+    "Elevate Core Dynamic Plank",
+    "Elevate Core Scrunch"
   ],
   Cardio:[
     "Treadmill",
@@ -466,12 +474,18 @@ const TIMED_EXERCISES=new Set([
   "Wall Sit","Hollow Body Hold","Superman Hold","L-Sit",
   "TRX Plank",
   "PF360 Pushup + Climber",
+  "Elevate Core Dynamic Plank",
   "TRUE Stretch Routine","Shoulder Stretch","Chest Stretch","Lat Stretch","Triceps Stretch",
   "Hamstring Stretch","Hip Flexor Stretch","Quad Stretch","Calf Stretch","Glute Stretch",
 ]);
 // Exercises set by bar/rung height (1-5) on the PF360 rig; logged as rung + duration. Lower rung = harder.
 const RUNG_EXERCISES=new Set([
   "PF360 Pushup + Climber",
+]);
+// Total Gym Elevate Core machine: 1-7 incline level. Level pairs with seconds (timed) or reps.
+const LEVEL_EXERCISES=new Set([
+  "Elevate Core Dynamic Plank",
+  "Elevate Core Scrunch",
 ]);
 const CARDIO_EXERCISES=new Set([
   "Treadmill","Rowing Machine","Bike","Elliptical","Recumbent Bike","Jump Rope",
@@ -622,7 +636,18 @@ function ApiKeyModal({onSave}){
   );
 }
 
-function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,noResistance=false,floor=0}){
+function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0}){
+  if(isLevel)return(
+    <div className="set-row">
+      <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.level||""} onChange={e=>onChange({...set,level:e.target.value})} style={{maxWidth:70}}/>
+      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LEVEL 1-7</span>
+      <span className="set-label">×</span>
+      {isTimed
+        ?<><input className="set-input" type="number" inputMode="decimal" placeholder="sec" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/><span className="set-label" style={{fontSize:8,lineHeight:1.2}}>SEC</span></>
+        :<input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>}
+      <button className="btn btn-danger" onClick={onRemove}>✕</button>
+    </div>
+  );
   if(isRung)return(
     <div className="set-row">
       <input className="set-input" type="number" inputMode="numeric" placeholder="rung" value={set.rung||""} onChange={e=>onChange({...set,rung:e.target.value})} style={{maxWidth:70}}/>
@@ -761,10 +786,13 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
   const isUnilateral=isUnilateralExercise(exercise.name);
   const isAssisted=ASSISTED_EXERCISES.has(exercise.name);
   const isRung=RUNG_EXERCISES.has(exercise.name);
+  const isLevel=LEVEL_EXERCISES.has(exercise.name);
   const isTimed=!isRung&&TIMED_EXERCISES.has(exercise.name);
   // Last-session peak for this exercise; used to flag (not block) any set logged below it
   const weightFloor=(!isAssisted&&!isCardio&&!TIMED_EXERCISES.has(exercise.name)&&!isBodyweight)?getLastSessionMaxWeight(exercise.name,history):0;
-  const blankSet=()=>isRung
+  const blankSet=()=>isLevel
+    ?(isTimed?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""})
+    :isRung
     ?{id:generateId(),rung:"",duration:""}
     :isTimed
     ?{id:generateId(),duration:""}
@@ -786,7 +814,9 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
     const newExLastMax=getLastSessionMaxWeight(newEx,history);
     // Always rebuild sets based on what the NEW exercise needs, preserving values where possible
     const newSets=exercise.sets.map(s=>{
-      if(RUNG_EXERCISES.has(newEx)){
+      if(LEVEL_EXERCISES.has(newEx)){
+        return TIMED_EXERCISES.has(newEx)?{id:s.id,level:"",duration:""}:{id:s.id,level:"",reps:s.reps||s.repsL||s.repsR||""};
+      } else if(RUNG_EXERCISES.has(newEx)){
         return{id:s.id,rung:"",duration:""};
       } else if(isNowCardio){
         return isBWCardio?{id:s.id,duration:""}:{id:s.id,duration:"",resistance:""};
@@ -855,7 +885,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
           AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
           AI TARGET: {exercise.aiReps} reps bodyweight
@@ -865,7 +895,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[]}){
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginBottom:3}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}</div>
-            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
+            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
           </div>
         ))}
       </div>
@@ -1371,10 +1401,11 @@ function GymTracker(){
     const isCardio=selectedMuscle==="Cardio";
     const isTimed=TIMED_EXERCISES.has(selectedExercise);
     const isRung=RUNG_EXERCISES.has(selectedExercise);
+    const isLevel=LEVEL_EXERCISES.has(selectedExercise);
     const savedUrls=loadYoutubeUrls();
     setExercises(prev=>[...prev,{id:generateId(),name:selectedExercise,muscle:selectedMuscle,
       youtubeUrl:savedUrls[selectedExercise]||"",
-      sets:[isRung?{id:generateId(),rung:"",duration:""}:isCardio?{id:generateId(),duration:"",resistance:""}:isTimed?{id:generateId(),duration:""}:isUni?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}:{id:generateId(),weight:"",reps:""}]}]);
+      sets:[isLevel?(isTimed?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""}):isRung?{id:generateId(),rung:"",duration:""}:isCardio?{id:generateId(),duration:"",resistance:""}:isTimed?{id:generateId(),duration:""}:isUni?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}:{id:generateId(),weight:"",reps:""}]}]);
     setScanResult(null);
   };
   useEffect(()=>{
@@ -1438,7 +1469,9 @@ function GymTracker(){
     return{
       id:generateId(),name:ex.name||"Exercise",muscle:ex.muscle||"",
       aiWeight:sw,aiReps:sr,superset,supersetLabel,restSeconds,activeRest,youtubeUrl:savedUrls[ex.name]||ex.youtubeUrl||"",
-      sets:Array.from({length:ex.sets||3},()=>RUNG_EXERCISES.has(ex.name||"")
+      sets:Array.from({length:ex.sets||3},()=>LEVEL_EXERCISES.has(ex.name||"")
+        ?(TIMED_EXERCISES.has(ex.name||"")?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""})
+        :RUNG_EXERCISES.has(ex.name||"")
         ?{id:generateId(),rung:"",duration:""}
         :isAssist
         ?{id:generateId(),assist:"",reps:sr}
