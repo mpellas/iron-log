@@ -1721,6 +1721,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
           <div className="section">
             {_draft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
             {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
+            {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add an exercise to this plan</button>}
             {(!loadedFromAI||manualAdd)&&(
               <>
                 <div className="section-label">Add Exercise</div>
@@ -1788,7 +1789,6 @@ Respond ONLY with valid JSON in this exact format (no other text):
                     </div>
                   );
                 })}
-                {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add another exercise manually</button>}
                 <div style={{marginBottom:10}}><textarea className="note-input" rows={2} placeholder="Session notes (optional)..." value={note} onChange={e=>setNote(e.target.value)}/></div>
                 <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={saveWorkout}>SAVE WORKOUT</button>
               </>
