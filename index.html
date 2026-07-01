@@ -264,7 +264,8 @@ const EXERCISE_LIBRARY={
     "Close-Grip Lat Pulldown",
     "Seated Cable Row",
     "Wide-Grip Seated Row",
-    "Single-Arm Cable Row",
+    "Kneeling Single-Arm Cable Row",
+    "Seated Single-Arm Cable Row",
     "Machine Row",
     "Chest-Supported Row Machine",
     "T-Bar Row",
@@ -457,6 +458,17 @@ const EXERCISE_LIBRARY={
     "Calf Stretch",
     "Glute Stretch"
   ],
+  Combo:[
+    "Tricep Ext + Hammer Curl + Press",
+    "Squat to Press",
+    "Curl to Press",
+    "RDL to Row",
+    "Reverse Lunge to Curl",
+    "Clean to Press",
+    "Renegade Row + Push-Up",
+    "Devil's Press",
+    "Man Maker"
+  ],
 };
 
 const BODYWEIGHT_EXERCISES=new Set([
@@ -497,7 +509,7 @@ const ASSISTED_EXERCISES=new Set([
   "Assisted Pull-Up Machine","Assisted Chin-Up (Wide Grip)","Assisted Chin-Up (Neutral Grip)","Assisted Chin-Up (Narrow Grip)",
 ])
 const UNILATERAL_EXERCISES=new Set([
-  "Single-Arm Dumbbell Row","Single-Arm Cable Row","Single-Arm Cable Fly",
+  "Single-Arm Dumbbell Row","Single-Arm Cable Fly",
   "Single-Arm Dumbbell Press","Single-Arm Lateral Raise","Single-Arm Front Raise",
   "Cable Lateral Raise","Single-Arm Cable Lateral Raise","Single-Arm Overhead Extension",
   "Single-Arm Dumbbell Kickback","Single-Arm Cable Pushdown",
@@ -1019,7 +1031,7 @@ function OverallGains({history}){
   });
   const muscles=Object.entries(muscleCount).sort((a,b)=>b[1]-a[1]);
   const maxCount=muscles[0]?.[1]||1;
-  const muscleColors={"Chest":"#7fff7f","Back":"#7fbfff","Shoulders":"#ffbf7f","Biceps":"#ff7fbf","Triceps":"#bf7fff","Legs":"#7fffff","Core":"#ffff7f","Forearms":"#ff9f7f","Stretching":"#dfb0ff"};
+  const muscleColors={"Chest":"#7fff7f","Back":"#7fbfff","Shoulders":"#ffbf7f","Biceps":"#ff7fbf","Triceps":"#bf7fff","Legs":"#7fffff","Core":"#ffff7f","Forearms":"#ff9f7f","Stretching":"#dfb0ff","Combo":"#ff7f7f"};
 
   if(!sessionData.length&&!muscles.length)return null;
 
