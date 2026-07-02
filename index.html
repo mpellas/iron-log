@@ -877,8 +877,8 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-          <button onClick={onMoveUp} disabled={!canMoveUp} title="Move up" style={{background:"none",border:"none",cursor:canMoveUp?"pointer":"default",fontSize:14,opacity:canMoveUp?0.65:0.15,padding:"2px 2px",color:"var(--text)"}}>▲</button>
-          <button onClick={onMoveDown} disabled={!canMoveDown} title="Move down" style={{background:"none",border:"none",cursor:canMoveDown?"pointer":"default",fontSize:14,opacity:canMoveDown?0.65:0.15,padding:"2px 2px",color:"var(--text)"}}>▼</button>
+          <button onClick={onMoveUp} disabled={!canMoveUp} title="Move up" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveUp?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveUp?"var(--accent)":"var(--muted)",opacity:canMoveUp?1:0.4,padding:"5px 7px"}}>↑</button>
+          <button onClick={onMoveDown} disabled={!canMoveDown} title="Move down" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveDown?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveDown?"var(--accent)":"var(--muted)",opacity:canMoveDown?1:0.4,padding:"5px 7px"}}>↓</button>
           <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"2px 4px",transition:"opacity 0.15s"}}>🚫</button>
           <button onClick={handleFlag} title={flagged?"Remove difficulty flag":"Flag as needs work"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:flagged?1:0.3,padding:"2px 4px",transition:"opacity 0.15s"}}>🚩</button>
           {allowSwap&&<button className="btn-swap" onClick={()=>setSwapOpen(o=>!o)}>{swapOpen?"CANCEL":"⇄ SWAP"}</button>}
