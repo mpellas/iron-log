@@ -155,7 +155,7 @@ function resizeImage(file){
   });
 }
 
-const MUSCLE_GROUPS=["Chest","Back","Shoulders","Biceps","Triceps","Forearms","Legs","Core","Cardio"];
+// MUSCLE_GROUPS is derived from the library (below) so new groups can never be missing from the picker
 function isUnilateralExercise(name){
   if(!name)return false;
   if(UNILATERAL_EXERCISES&&UNILATERAL_EXERCISES.has(name))return true;
@@ -470,6 +470,7 @@ const EXERCISE_LIBRARY={
     "Man Maker"
   ],
 };
+const MUSCLE_GROUPS=Object.keys(EXERCISE_LIBRARY);
 
 const BODYWEIGHT_EXERCISES=new Set([
   "Push-Ups","Chest Dips","Pull-Ups","Chin-Ups","Tricep Dips","Bench Dips",
