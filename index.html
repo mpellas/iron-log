@@ -73,7 +73,8 @@ function loadApiKey(){return localStorage.getItem("ironlog:apikey")||"";}
 function saveApiKey(k){localStorage.setItem("ironlog:apikey",k);}
 function loadDynamicLibrary(){try{return JSON.parse(localStorage.getItem("ironlog:library")||"{}");}catch{return{};}
 }
-function saveDynamicLibrary(lib){try{localStorage.setItem("ironlog:library",JSON.stringify(lib));}catch(e){}}
+function saveDynamicLibrary(lib){try{localStorage.setItem("ironlog:library",JSON.stringify(lib));_mergedLibraryCache=null;}catch(e){}}
+let _mergedLibraryCache=null;
 function addToLibrary(muscle,name){
   if(!muscle||!name)return;
   const lib=loadDynamicLibrary();
@@ -215,19 +216,18 @@ function getLastSessionMaxWeight(name,history){
   return 0;
 }
 function getMergedLibrary(){
+  if(_mergedLibraryCache)return _mergedLibraryCache;
   const base=JSON.parse(JSON.stringify(EXERCISE_LIBRARY));
   const dynamic=loadDynamicLibrary();
   Object.entries(dynamic).forEach(([muscle,exs])=>{
     if(!base[muscle])base[muscle]=[];
     exs.forEach(ex=>{if(!base[muscle].includes(ex))base[muscle].push(ex);});
   });
+  _mergedLibraryCache=base;
   return base;
 }
 const EXERCISE_LIBRARY={
   Chest:[
-    "Barbell Bench Press",
-    "Barbell Incline Bench Press",
-    "Barbell Decline Bench Press",
     "Smith Machine Bench Press",
     "Smith Machine Incline Press",
     "Smith Machine Decline Press",
@@ -252,8 +252,6 @@ const EXERCISE_LIBRARY={
     "TRX Chest Press"
   ],
   Back:[
-    "Barbell Row",
-    "Barbell Deadlift",
     "Sumo Deadlift",
     "Romanian Deadlift",
     "Single-Arm Dumbbell Row",
@@ -270,6 +268,9 @@ const EXERCISE_LIBRARY={
     "Chest-Supported Row Machine",
     "T-Bar Row",
     "Pull-Ups",
+    "Wide-Grip Pull-Ups",
+    "Close-Grip Pull-Ups",
+    "Neutral-Grip Pull-Ups",
     "Chin-Ups",
     "Assisted Chin-Up (Wide Grip)",
     "Assisted Chin-Up (Neutral Grip)",
@@ -281,8 +282,6 @@ const EXERCISE_LIBRARY={
     "TRX Row"
   ],
   Shoulders:[
-    "Barbell Overhead Press",
-    "Barbell Upright Row",
     "Dumbbell Overhead Press",
     "Single-Arm Dumbbell Press",
     "Lateral Raises",
@@ -306,9 +305,7 @@ const EXERCISE_LIBRARY={
     "TRX Y-Fly"
   ],
   Biceps:[
-    "Barbell Curl",
     "EZ-Bar Curl",
-    "Barbell Preacher Curl",
     "Dumbbell Curl",
     "Single-Arm Dumbbell Curl",
     "Hammer Curl",
@@ -347,10 +344,8 @@ const EXERCISE_LIBRARY={
     "TRX Tricep Extension"
   ],
   Forearms:[
-    "Barbell Wrist Curl",
     "Dumbbell Wrist Curl",
     "Single-Arm Wrist Curl",
-    "Barbell Reverse Wrist Curl",
     "Dumbbell Reverse Wrist Curl",
     "Cable Wrist Curl",
     "Cable Reverse Wrist Curl",
@@ -367,9 +362,6 @@ const EXERCISE_LIBRARY={
     "Machine Wrist Roller"
   ],
   Legs:[
-    "Barbell Squat",
-    "Barbell Romanian Deadlift",
-    "Barbell Lunge",
     "Smith Machine Squat",
     "Smith Machine Lunge",
     "Smith Machine Romanian Deadlift",
@@ -473,7 +465,7 @@ const EXERCISE_LIBRARY={
 const MUSCLE_GROUPS=Object.keys(EXERCISE_LIBRARY);
 
 const BODYWEIGHT_EXERCISES=new Set([
-  "Push-Ups","Chest Dips","Pull-Ups","Chin-Ups","Tricep Dips","Bench Dips",
+  "Push-Ups","Chest Dips","Pull-Ups","Wide-Grip Pull-Ups","Close-Grip Pull-Ups","Neutral-Grip Pull-Ups","Chin-Ups","Tricep Dips","Bench Dips",
   "TRX Chest Press","TRX Row","TRX Y-Fly","TRX Bicep Curl","TRX Tricep Extension","TRX Squat","TRX Hamstring Curl","TRX Pike",
   "Plank","Side Plank","Single-Arm Plank","Crunches","Bicycle Crunches",
   "Reverse Crunches","Hanging Leg Raises","Hanging Knee Raises",
@@ -1080,12 +1072,50 @@ function ProgressTab({history}){
   if(!allExercises.length)return(<div><OverallGains history={history}/><div className="section"><div className="empty-state"><span style={{fontSize:36,display:"block",marginBottom:12,opacity:0.3}}>📈</span>Log some workouts first<br/>and your progress will appear here.</div></div></div>);
   const isUni=isUnilateralExercise(selected);
   const isAssistEx=ASSISTED_EXERCISES.has(selected);
+  const isBodyweightEx=BODYWEIGHT_EXERCISES.has(selected);
+  const isRungEx=RUNG_EXERCISES.has(selected);
+  const isLevelEx=LEVEL_EXERCISES.has(selected);
+  const isTimedEx=TIMED_EXERCISES.has(selected)&&!isRungEx&&!isLevelEx;
+  const nonWeight=isBodyweightEx||isRungEx||isLevelEx||isTimedEx;
   const bwGains=loadBodyweight();
   const dataPoints=[];
   [...history].reverse().forEach(w=>{
     const ex=w.exercises.find(e=>e.name===selected);
     if(!ex)return;
-    if(isAssistEx){
+    if(isBodyweightEx){
+      const valid=ex.sets.filter(s=>s.reps&&!s.weight&&!s.weightL);
+      if(!valid.length)return;
+      const maxReps=Math.max(...valid.map(s=>Number(s.reps||0)));
+      const totalReps=valid.reduce((s,x)=>s+Number(x.reps||0),0);
+      const shortDate=new Date(w.dateKey).toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
+      // reuse chart shape: maxWeight=peak reps, volume=total reps, unitLabel via nonWeight flag
+      dataPoints.push({date:w.date,shortDate,volume:totalReps,maxWeight:maxReps,totalReps,sets:valid.length});
+    }else if(isRungEx){
+      const valid=ex.sets.filter(s=>s.rung!==undefined&&s.rung!==""&&s.duration);
+      if(!valid.length)return;
+      const minRung=Math.min(...valid.map(s=>Number(s.rung||99)));
+      const maxSecs=Math.max(...valid.map(s=>Number(s.duration||0)));
+      const totalSecs=valid.reduce((s,x)=>s+Number(x.duration||0),0);
+      const shortDate=new Date(w.dateKey).toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
+      // lower rung = harder progress; chart the maxSecs and note minRung
+      dataPoints.push({date:w.date,shortDate,volume:totalSecs,maxWeight:maxSecs,totalReps:minRung,sets:valid.length,rungMin:minRung});
+    }else if(isLevelEx){
+      const valid=ex.sets.filter(s=>s.level!==undefined&&s.level!==""&&(s.duration||s.reps));
+      if(!valid.length)return;
+      const maxLevel=Math.max(...valid.map(s=>Number(s.level||0)));
+      const useReps=valid.some(s=>s.reps)&&!valid.some(s=>s.duration);
+      const totalMetric=valid.reduce((s,x)=>s+Number((useReps?x.reps:x.duration)||0),0);
+      const peak=Math.max(...valid.map(s=>Number((useReps?s.reps:s.duration)||0)));
+      const shortDate=new Date(w.dateKey).toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
+      dataPoints.push({date:w.date,shortDate,volume:totalMetric,maxWeight:maxLevel,totalReps:peak,sets:valid.length,levelMetric:useReps?"reps":"sec"});
+    }else if(isTimedEx){
+      const valid=ex.sets.filter(s=>s.duration&&s.rung===undefined&&s.level===undefined);
+      if(!valid.length)return;
+      const maxSecs=Math.max(...valid.map(s=>Number(s.duration||0)));
+      const totalSecs=valid.reduce((s,x)=>s+Number(x.duration||0),0);
+      const shortDate=new Date(w.dateKey).toLocaleDateString("en-US",{month:"numeric",day:"numeric"});
+      dataPoints.push({date:w.date,shortDate,volume:totalSecs,maxWeight:maxSecs,totalReps:valid.length,sets:valid.length});
+    }else if(isAssistEx){
       const valid=ex.sets.filter(s=>s.assist!==undefined&&s.reps);
       if(!valid.length)return;
       const actualLoads=valid.map(s=>bwGains>0?Math.max(0,bwGains-Number(s.assist||0)):0);
@@ -1125,7 +1155,7 @@ function ProgressTab({history}){
       <div className="section">
       <div className="section-label">Exercise Progress</div>
       <div style={{marginBottom:20}}><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{allExercises.map(ex=><option key={ex}>{ex}</option>)}</select></div>
-      {!hasData&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No logged sets with weight for this exercise yet.</div>}
+      {!hasData&&<div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>{nonWeight?"No logged sets for this exercise yet.":"No logged sets with weight for this exercise yet."}</div>}
       {hasData&&(
         <>
           {isUni&&latest?.maxWeightL!==undefined&&(
@@ -1146,32 +1176,50 @@ function ProgressTab({history}){
               </div>
             </div>
           )}
+          {(()=>{const unit=isBodyweightEx?"reps":isTimedEx||isRungEx?"s":isLevelEx?"":"lb";
+            const bestLabel=isBodyweightEx?"Best Reps":isRungEx||isTimedEx?"Best Hold":isLevelEx?"Best Level":"Best Weight";
+            const bestVal=isLevelEx?`Lv${bestWeight}`:bestWeight;
+            const deltaLabel=isBodyweightEx?"reps":isRungEx||isTimedEx?"s":isLevelEx?"lv":"lb";
+            return(
           <div className="prog-stats">
-            <div className="prog-stat"><div className="prog-stat-val">{bestWeight}<span style={{fontSize:12}}>lb</span></div><div className="prog-stat-lbl">Best Weight</div></div>
+            <div className="prog-stat"><div className="prog-stat-val">{bestVal}<span style={{fontSize:12}}>{unit}</span></div><div className="prog-stat-lbl">{bestLabel}</div></div>
             <div className="prog-stat"><div className="prog-stat-val">{dataPoints.length}</div><div className="prog-stat-lbl">Sessions</div></div>
             <div className="prog-stat">
               <div className="prog-stat-val" style={{color:weightDelta===null?"var(--accent)":weightDelta>0?"var(--accent)":weightDelta<0?"var(--danger)":"var(--muted)",fontSize:18,paddingTop:4}}>
-                {weightDelta===null?"–":weightDelta>0?`+${weightDelta}`:weightDelta===0?"=":weightDelta}<span style={{fontSize:10}}>lb</span>
+                {weightDelta===null?"–":weightDelta>0?`+${weightDelta}`:weightDelta===0?"=":weightDelta}<span style={{fontSize:10}}>{deltaLabel}</span>
               </div>
               <div className="prog-stat-lbl">vs Last</div>
             </div>
-          </div>
-          {dataPoints.length>=2&&<ProgressChart data={dataPoints} valueKey="maxWeight" color="var(--accent)" label="Peak Weight Per Session (lb)" unit="lb"/>}
-          {dataPoints.length>=2&&<ProgressChart data={dataPoints} valueKey="volume" color="var(--accent2)" label="Total Volume Per Session (lb x reps)"/>}
+          </div>);
+          })()}
+          {(()=>{const unit=isBodyweightEx?"reps":isTimedEx||isRungEx?"sec":isLevelEx?"level":"lb";
+            const peakLabel=isBodyweightEx?"Peak Reps Per Session":isRungEx?"Peak Hold Per Session (sec)":isLevelEx?"Peak Level Per Session":isTimedEx?"Peak Hold Per Session (sec)":"Peak Weight Per Session (lb)";
+            const volLabel=isBodyweightEx?"Total Reps Per Session":isRungEx||isTimedEx?"Total Seconds Per Session":isLevelEx?"Total Session Metric":"Total Volume Per Session (lb x reps)";
+            return(<>
+              {dataPoints.length>=2&&<ProgressChart data={dataPoints} valueKey="maxWeight" color="var(--accent)" label={peakLabel} unit={unit}/>}
+              {dataPoints.length>=2&&<ProgressChart data={dataPoints} valueKey="volume" color="var(--accent2)" label={volLabel}/>}
+            </>);
+          })()}
           {dataPoints.length===1&&<div className="prog-note">Log this exercise again to see your trend.</div>}
           <div className="section-label" style={{marginTop:8}}>Session History</div>
-          {[...dataPoints].reverse().map((d,i)=>(
+          {[...dataPoints].reverse().map((d,i)=>{
+            const unit=isBodyweightEx?"reps":isTimedEx||isRungEx?"s":isLevelEx?`Lv`:"lb";
+            const primary=isLevelEx?`Lv${d.maxWeight}`:`${d.maxWeight}${unit}`;
+            const subtitle=isBodyweightEx?`${d.sets} sets · ${d.totalReps} total reps`:isRungEx?`${d.sets} sets · min rung ${d.rungMin}`:isLevelEx?`${d.sets} sets · peak ${d.totalReps} ${d.levelMetric}`:isTimedEx?`${d.sets} sets · ${Math.round(d.volume)}s total`:`${d.sets} sets · ${d.totalReps} total reps`;
+            const volTag=isBodyweightEx?`${Math.round(d.volume)} reps`:isRungEx||isTimedEx?`${Math.round(d.volume)}s`:isLevelEx?`${Math.round(d.volume)}`:`vol ${Math.round(d.volume).toLocaleString()}`;
+            return(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
               <div>
                 <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{d.shortDate}</div>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{d.sets} sets &middot; {d.totalReps} total reps</div>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{subtitle}</div>
               </div>
               <div style={{textAlign:"right"}}>
-                <div style={{fontFamily:"Bebas Neue",fontSize:18,color:"var(--accent)",letterSpacing:1}}>{d.maxWeight}lb</div>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>vol {Math.round(d.volume).toLocaleString()}</div>
+                <div style={{fontFamily:"Bebas Neue",fontSize:18,color:"var(--accent)",letterSpacing:1}}>{primary}</div>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>{volTag}</div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </>
       )}
     </div>
@@ -1564,7 +1612,14 @@ function GymTracker(){
         const validBilateral=e.sets.filter(s=>s.weight&&s.reps);
         const validUnilateral=e.sets.filter(s=>(s.weightL||s.weightR)&&(s.repsL||s.repsR));
         const validAssisted=e.sets.filter(s=>s.assist!==undefined&&s.reps);
+        const validBodyweight=BODYWEIGHT_EXERCISES.has(e.name)?e.sets.filter(s=>s.reps&&!s.weight&&!s.weightL):[];
+        const validRung=RUNG_EXERCISES.has(e.name)?e.sets.filter(s=>s.rung!==undefined&&s.rung!==""&&s.duration):[];
+        const validLevelTimed=LEVEL_EXERCISES.has(e.name)?e.sets.filter(s=>s.level!==undefined&&s.level!==""&&s.duration):[];
+        const validLevelReps=LEVEL_EXERCISES.has(e.name)?e.sets.filter(s=>s.level!==undefined&&s.level!==""&&s.reps):[];
+        const validTimed=TIMED_EXERCISES.has(e.name)&&!LEVEL_EXERCISES.has(e.name)&&!RUNG_EXERCISES.has(e.name)?e.sets.filter(s=>s.duration&&s.rung===undefined&&s.level===undefined):[];
         let maxWeight=0,totalSets=0,avgReps=0,completedAllReps=false;
+        // Extra metrics for non-weight types (fed to the AI so it can progress these lifts)
+        let entryType="weight",avgSecs=0,maxRung=0,minRung=0,maxLevel=0;
         if(validUnilateral.length){
           maxWeight=Math.max(...validUnilateral.map(s=>Math.max(Number(s.weightL||0),Number(s.weightR||0))));
           totalSets=validUnilateral.length;
@@ -1576,6 +1631,37 @@ function GymTracker(){
           totalSets=validAssisted.length;
           avgReps=Math.round(validAssisted.reduce((sum,s)=>sum+Number(s.reps||0),0)/totalSets);
           completedAllReps=validAssisted.every(s=>Number(s.reps||0)>=8);
+        } else if(validBodyweight.length){
+          entryType="bodyweight";
+          totalSets=validBodyweight.length;
+          avgReps=Math.round(validBodyweight.reduce((sum,s)=>sum+Number(s.reps||0),0)/totalSets);
+          const target=["dip","pull","chin"].some(k=>e.name.toLowerCase().includes(k))?8:12;
+          completedAllReps=validBodyweight.every(s=>Number(s.reps||0)>=target);
+        } else if(validRung.length){
+          entryType="rung";
+          totalSets=validRung.length;
+          maxRung=Math.max(...validRung.map(s=>Number(s.rung||0)));
+          minRung=Math.min(...validRung.map(s=>Number(s.rung||99)));
+          avgSecs=Math.round(validRung.reduce((sum,s)=>sum+Number(s.duration||0),0)/totalSets);
+          // Progression on PF360: lower rung = harder. "Completed" means held target duration on hardest rung.
+          completedAllReps=validRung.every(s=>Number(s.duration||0)>=40);
+        } else if(validLevelTimed.length){
+          entryType="leveltimed";
+          totalSets=validLevelTimed.length;
+          maxLevel=Math.max(...validLevelTimed.map(s=>Number(s.level||0)));
+          avgSecs=Math.round(validLevelTimed.reduce((sum,s)=>sum+Number(s.duration||0),0)/totalSets);
+          completedAllReps=validLevelTimed.every(s=>Number(s.duration||0)>=45);
+        } else if(validLevelReps.length){
+          entryType="levelreps";
+          totalSets=validLevelReps.length;
+          maxLevel=Math.max(...validLevelReps.map(s=>Number(s.level||0)));
+          avgReps=Math.round(validLevelReps.reduce((sum,s)=>sum+Number(s.reps||0),0)/totalSets);
+          completedAllReps=validLevelReps.every(s=>Number(s.reps||0)>=12);
+        } else if(validTimed.length){
+          entryType="timed";
+          totalSets=validTimed.length;
+          avgSecs=Math.round(validTimed.reduce((sum,s)=>sum+Number(s.duration||0),0)/totalSets);
+          completedAllReps=validTimed.every(s=>Number(s.duration||0)>=45);
         } else if(validBilateral.length){
           maxWeight=Math.max(...validBilateral.map(s=>Number(s.weight)));
           totalSets=validBilateral.length;
@@ -1586,22 +1672,46 @@ function GymTracker(){
           const effectiveTarget=targetReps>0?targetReps:defaultTarget;
           completedAllReps=validBilateral.every(s=>Number(s.reps||0)>=effectiveTarget);
         } else return;
-        exerciseHistory[e.name].push({date:w.dateKey,maxWeight,totalSets,avgReps,completedAllReps});
+        exerciseHistory[e.name].push({date:w.dateKey,maxWeight,totalSets,avgReps,completedAllReps,entryType,avgSecs,maxRung,minRung,maxLevel});
       });
     });
     const progressionSummary=Object.entries(exerciseHistory).map(([name,sessions])=>{
       const recent=sessions.slice(-3);
-      const trend=recent.map(s=>`${s.date}: ${s.totalSets}x${s.avgReps} @ ${s.maxWeight}lb`).join(" -> ");
       const latest=recent[recent.length-1];
-      let suggested=null;
-      if(latest){
-        const isCompound=["press","row","squat","deadlift","lunge","pull","dip","chin"].some(k=>name.toLowerCase().includes(k));
-        const increment=isCompound?5:2.5;
-        suggested=latest.completedAllReps?latest.maxWeight+increment:latest.maxWeight;
+      if(!latest)return `${name}: no history`;
+      const t=latest.entryType||"weight";
+      if(t==="bodyweight"){
+        const trend=recent.map(s=>`${s.date}: ${s.totalSets}x${s.avgReps}reps`).join(" -> ");
+        const note=latest.completedAllReps?"INCREASE REPS or add difficulty":"HOLD reps";
+        return `${name} [BODYWEIGHT — reps-only, no weight field]: ${trend} → ACTION: ${note}, target ~${latest.avgReps+(latest.completedAllReps?2:0)} reps`;
       }
-      const progressNote=latest?.completedAllReps?"INCREASE — completed all reps":"HOLD — did not complete all reps";
-      const minWeight=latest?latest.maxWeight:0;
-      return `${name} [MINIMUM WEIGHT: ${minWeight}lb — do NOT go below this]: ${trend} → ACTION: ${progressNote}, USE: ${suggested!==null?suggested+"lb":"no history"}`;
+      if(t==="rung"){
+        const trend=recent.map(s=>`${s.date}: R${s.minRung}-${s.maxRung}×${s.avgSecs}s (${s.totalSets} sets)`).join(" -> ");
+        const note=latest.completedAllReps?"HARDER — try one rung lower next time (lower=harder)":"HOLD rung, aim for longer duration";
+        return `${name} [PF360 RUNG-based, no weight — lower rung=harder]: ${trend} → ACTION: ${note}`;
+      }
+      if(t==="leveltimed"){
+        const trend=recent.map(s=>`${s.date}: Lv${s.maxLevel}×${s.avgSecs}s (${s.totalSets} sets)`).join(" -> ");
+        const note=latest.completedAllReps?"INCREASE LEVEL next time":"HOLD level, aim for longer hold";
+        return `${name} [ELEVATE CORE LEVEL-based (1-7) + seconds, no weight]: ${trend} → ACTION: ${note}`;
+      }
+      if(t==="levelreps"){
+        const trend=recent.map(s=>`${s.date}: Lv${s.maxLevel}×${s.avgReps}reps (${s.totalSets} sets)`).join(" -> ");
+        const note=latest.completedAllReps?"INCREASE LEVEL next time":"HOLD level, more reps";
+        return `${name} [ELEVATE CORE LEVEL-based (1-7) + reps, no weight]: ${trend} → ACTION: ${note}`;
+      }
+      if(t==="timed"){
+        const trend=recent.map(s=>`${s.date}: ${s.totalSets}×${s.avgSecs}s`).join(" -> ");
+        const note=latest.completedAllReps?"INCREASE duration ~10-15s":"HOLD duration";
+        return `${name} [TIMED — seconds-only, no weight]: ${trend} → ACTION: ${note}`;
+      }
+      // weight-based (bilateral / unilateral / assisted)
+      const trend=recent.map(s=>`${s.date}: ${s.totalSets}x${s.avgReps} @ ${s.maxWeight}lb`).join(" -> ");
+      const isCompound=["press","row","squat","deadlift","lunge","pull","dip","chin"].some(k=>name.toLowerCase().includes(k));
+      const increment=isCompound?5:2.5;
+      const suggested=latest.completedAllReps?latest.maxWeight+increment:latest.maxWeight;
+      const progressNote=latest.completedAllReps?"INCREASE — completed all reps":"HOLD — did not complete all reps";
+      return `${name} [MINIMUM WEIGHT: ${latest.maxWeight}lb — do NOT go below this]: ${trend} → ACTION: ${progressNote}, USE: ${suggested}lb`;
     }).join("\n");
 
     const recentSummary=history.slice(0,7).map(w=>{
@@ -1665,8 +1775,14 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
 - WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with last logged weight and completion status. You MUST use these weights as your baseline. NEVER suggest a weight lower than the last logged weight — this is a hard rule with no exceptions. If all reps were completed: suggest last weight +5lb for compounds, +2.5lb for isolation. If reps were not completed: suggest the exact same weight as last time. If no history exists: make a reasonable starting estimate based on the exercise type.
 - Dumbbells max 75lb. For unilateral exercises left and right are logged separately
 - Rep ranges by exercise type: compound movements (press, row, squat, deadlift) = 6-10 reps; isolation movements (flyes, raises, curls, kickbacks, extensions, crossovers) = 10-15 reps. ALWAYS include a specific weight suggestion — never leave weight blank
-- BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Plank, etc.) must have weight set to "bodyweight" — never assign a number weight to these
-- For any barbell press movement (bench press, incline bench press, overhead press, etc.) ALWAYS recommend the Smith Machine version instead (e.g. "Smith Machine Incline Press" not "Barbell Incline Bench Press"). User's gym has Smith machines but barbell pressing is not preferred.
+- BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Bench Dips, Plank, all TRX exercises like TRX Row / TRX Chest Press / TRX Bicep Curl, etc.) must have weight set to "bodyweight" — never assign a number weight to these
+- SPECIAL EQUIPMENT TYPES with no weight field:
+  * TIMED exercises (Plank, Wall Sit, Dead Hang, TRX Plank, all Stretching entries): log seconds only, set reps to duration in seconds and weight to "bodyweight"
+  * PF360 RUNG exercises (PF360 Pushup + Climber): user picks a rung 1–5 on the rig (LOWER rung = HARDER) and holds for seconds. Do NOT assign weight; suggest target rung and seconds in the notes/reps field
+  * ELEVATE CORE LEVEL exercises (Elevate Core Dynamic Plank timed, Elevate Core Scrunch reps-based): user picks level 1–7 (HIGHER level = HARDER). Do NOT assign weight; suggest target level and duration/reps in the notes
+- STRETCHING group: only use stretches as an optional cool-down block AFTER the main workout, never as a superset partner during strength work
+- COMBO exercises (dumbbell complexes like "Squat to Press", "Man Maker", "Curl to Press"): these chain 2–4 movements with one dumbbell weight. Use as conditioning finishers or standalone sessions, not as superset partners for isolation work. Weight = the limiting movement's max
+- For any barbell press movement (bench press, incline bench press, overhead press, etc.) ALWAYS recommend the Smith Machine version — user's gym has Smith machines but NO free barbells. Never suggest barbell exercises.
 - REP RANGES: compound movements (press, row, squat, deadlift) 6-12 reps. Isolation movements (flyes, lateral raise, curl, extension, fly) 10-15 reps. Never recommend fewer than 8 reps for any isolation exercise
 - WEIGHT: always provide a specific weight value for every non-bodyweight exercise — never leave weight blank or omit it
 - VARIETY IS CRITICAL: DO NOT use any exercise from the last session. Last session exercises (forbidden): ${lastSessionExercises.length>0?lastSessionExercises.join(", "):"none"}.
