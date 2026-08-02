@@ -471,7 +471,18 @@ const EXERCISE_LIBRARY={
     "Floor Press + Sit-Up",
     "Thruster + Burpee",
     "Farmer's Carry + Reverse Lunge",
-    "Curl + Squat + Press"
+    "Curl + Squat + Press",
+    "Lateral Lunge to Curl",
+    "Curtsy Lunge to Press",
+    "Woodchopper Squat",
+    "T Push-Up (Push-Up + Rotation)",
+    "Step-Up to Curl",
+    "Step-Up to Press",
+    "Deadlift to Curl",
+    "RDL to Reverse Fly",
+    "Burpee to Deadlift",
+    "Squat Jump to Press",
+    "Hip Thrust + Chest Press"
   ],
 };
 const MUSCLE_GROUPS=Object.keys(EXERCISE_LIBRARY);
@@ -504,10 +515,10 @@ const LEVEL_EXERCISES=new Set([
   "Elevate Core Dynamic Plank",
   "Elevate Core Scrunch",
 ]);
+// True duration-only cardio (no machine level). Machines like Treadmill/Elliptical/Bike show a LEVEL field.
 const CARDIO_EXERCISES=new Set([
-  "Treadmill","Rowing Machine","Bike","Elliptical","Recumbent Bike","Jump Rope",
-  "Stair Climber","Arc Trainer","Jumping Jacks","High Knees","Mountain Climbers",
-  "Burpees","Box Steps","Stationary Bike","Sprint","Bike Sprint","Battle Ropes",
+  "Jump Rope","Jumping Jacks","High Knees","Mountain Climbers",
+  "Burpees","Box Steps","Sprint","Battle Ropes",
 ]);
 const ASSISTED_EXERCISES=new Set([
   "Assisted Dip Machine","Assisted Dip (Narrow Grip)","Assisted Dip (Wide Grip)","Assisted Dip (Neutral Grip)",
@@ -542,6 +553,11 @@ const css=`
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
   .section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
+  .help-p{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.65;color:var(--text);margin:0 0 14px 0;}
+  .help-p b{color:var(--accent);font-weight:normal;}
+  .help-p code{background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent2);font-size:11px;}
+  .help-tab .section-label + .help-p{margin-top:-2px;}
+  .help-tab .section-label:not(:first-of-type){margin-top:22px;}
   .input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;border-radius:6px;outline:none;transition:border-color 0.15s;}
   .input:focus{border-color:var(--accent);}
   select.input{cursor:pointer;}
@@ -676,11 +692,15 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     </div>
   );
   if(isCardio)return(
-    <div className="set-row">
-      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/>
+    <div className="set-row" style={{flexWrap:"wrap",gap:6}}>
+      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{maxWidth:80}}/>
       <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>MIN</span>
-      {!noResistance&&<input className="set-input" type="number" inputMode="decimal" placeholder="res" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})}/>}
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>RES</span>
+      {!noResistance&&<>
+        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{maxWidth:70}}/>
+        <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LEVEL</span>
+      </>}
+      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{maxWidth:80}}/>
+      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>CAL</span>
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
@@ -873,7 +893,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
         <div style={{flex:1,minWidth:0}}>
           <div className="exercise-name">{exercise.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            <div className="exercise-meta">{exercise.muscle}{isCardio?(CARDIO_EXERCISES.has(exercise.name)?" · duration only":" · duration + resistance"):""}</div>
+            <div className="exercise-meta">{exercise.muscle}{isCardio?(CARDIO_EXERCISES.has(exercise.name)?" · duration + calories":" · duration + level + calories"):""}</div>
             {isBodyweight&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#0a0a0a",background:"var(--accent)",borderRadius:3,padding:"1px 5px"}}>BODYWEIGHT</span>}
             {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"1px 5px"}}>L+R</span>}
             {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#fff",background:"#555",borderRadius:3,padding:"1px 5px"}}>NOT AT MY GYM</span>}
@@ -1893,7 +1913,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
         </div>
 
         <div className="nav">
-          {[["log","LOG"],["history","HISTORY"],["progress","GAINS"],["ai","AI REC"]].map(([id,label])=>(
+          {[["log","LOG"],["history","HISTORY"],["progress","GAINS"],["ai","AI REC"],["help","HELP"]].map(([id,label])=>(
             <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -2115,6 +2135,64 @@ Respond ONLY with valid JSON in this exact format (no other text):
             {!aiPlan&&!aiLoading&&!aiError&&(
               <div className="empty-state"><span className="empty-icon">🤖</span>Claude will analyze your history and build<br/>a superset-based Planet Fitness workout plan.</div>
             )}
+          </div>
+        )}
+        {tab==="help"&&(
+          <div className="content help-tab">
+            <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>WELCOME TO 90STRONG</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A gym-tracking app built around variety and honest progression. No coaching fluff — just log your work, watch it trend, and let the AI mix up your plans when you want a change.</div>
+
+            <div className="section-label">Getting Started</div>
+            <div className="help-p">Tap <b>LOG</b> to record a session from scratch, or <b>AI REC</b> to have Claude build one for you based on what you've done recently. Everything you log is saved on your device automatically — no account, no cloud, no sign-in.</div>
+            <div className="help-p">First time? Open <b>Settings</b> (⚙️ top right), paste an Anthropic API key if you want AI plans, and enter your bodyweight so assisted machines can calculate your real load.</div>
+
+            <div className="section-label">The Five Tabs</div>
+            <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE SESSION</b> when you're done.</div>
+            <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data here (<b>EXPORT</b> button) — details below.</div>
+            <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations. Elevate Core shows level progression.</div>
+            <div className="help-p"><b>AI REC</b> — Claude builds a superset-based Planet Fitness workout. Pick your focus (Push/Pull/Legs or let it rotate). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
+            <div className="help-p"><b>HELP</b> — you're here.</div>
+
+            <div className="section-label">The AI Plans</div>
+            <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and Planet Fitness's equipment. It won't suggest barbells (PF doesn't have them) or drop your weight below what you already lifted.</div>
+            <div className="help-p">You supply the API key — the app talks directly to Anthropic. A typical plan generation costs pennies. Your key is stored locally and never sent anywhere except Anthropic.</div>
+            <div className="help-p">Once loaded, you can <b>SWAP</b> any exercise (machine taken?), <b>▲▼</b> reorder them, or add more manually with the button at the top of the plan.</div>
+
+            <div className="section-label">Special Equipment</div>
+            <div className="help-p"><b>TRX straps</b> log as bodyweight × reps. Progress by walking your feet forward for a harder angle.</div>
+            <div className="help-p"><b>PF360 rig</b> (Pushup + Climber) logs as rung × seconds. <i>Lower rung = harder.</i></div>
+            <div className="help-p"><b>Elevate Core machine</b> logs as level (1–7) × seconds (Dynamic Plank) or level × reps (Scrunch). Higher level = harder.</div>
+            <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
+
+            <div className="section-label">Combos</div>
+            <div className="help-p">A combo is a chain of movements done back-to-back with one dumbbell — e.g. Squat to Press, Man Maker. Log one weight (whatever the limiting movement allows) and one rep count (how many rounds through the full sequence). 21 combos are built in; pick from the <b>Combo</b> group in the exercise picker.</div>
+
+            <div className="section-label">Tips You'll Miss On Your First Session</div>
+            <div className="help-p"><b>The 🚫 icon</b> marks a machine as unavailable at your gym — the AI stops suggesting it.</div>
+            <div className="help-p"><b>The 🚩 icon</b> flags an exercise you want emphasized. The AI weights flagged exercises more heavily in future plans.</div>
+            <div className="help-p"><b>The "below last" warning</b> appears if you enter a weight lower than your last session — a safety net against under-lifting by accident.</div>
+            <div className="help-p"><b>SWAP</b> pre-fills the new exercise at <i>your last weight for that exercise</i>, not the weight of what you swapped out of.</div>
+            <div className="help-p"><b>Superset labels</b> (A/B pairs) tell you to do the two exercises back-to-back with no rest between them — active rest comes after B.</div>
+
+            <div className="section-label">Your Data</div>
+            <div className="help-p">Everything lives in your phone's browser storage. No account exists. If you clear the site's data or uninstall, your history goes with it.</div>
+            <div className="help-p"><b>Back up regularly</b> from the HISTORY tab — <b>EXPORT</b> downloads a JSON file. Save it somewhere safe (email it to yourself, drop it in Google Drive). <b>IMPORT</b> restores it later, on any device.</div>
+            <div className="help-p">The only data that ever leaves your device is what you send to Anthropic when generating an AI plan (your recent history summary). Anthropic's privacy terms apply to that.</div>
+
+            <div className="section-label">Troubleshooting</div>
+            <div className="help-p"><b>After an update, I don't see the new features.</b> Your browser cached the old version. Add <code>?v=2</code> (or 3, 4, any number) to the URL to force a fresh load. On the home-screen app, fully close and reopen it.</div>
+            <div className="help-p"><b>AI gives an error.</b> Check <b>status.anthropic.com</b>. Most errors are: invalid/missing API key, no credits, or a model retirement. The app's model can be updated if that happens.</div>
+            <div className="help-p"><b>Black screen.</b> Rare, and usually a CDN loading issue on the first load. Refresh once. If it persists, try incognito mode.</div>
+
+            <div className="section-label">FAQ</div>
+            <div className="help-p"><b>Do I need an API key?</b> Only for AI plans. Everything else — logging, history, GAINS — works with no key.</div>
+            <div className="help-p"><b>Can I use this at a non-PF gym?</b> Yes. The AI is tuned for PF's equipment, but manual logging works for any lift.</div>
+            <div className="help-p"><b>Can I add my own exercises?</b> Yes — type a name in the exercise dropdown; the app saves it to your custom library.</div>
+            <div className="help-p"><b>Does the AI know if I flag or ban exercises?</b> Yes. Flags increase frequency; bans remove them entirely.</div>
+            <div className="help-p"><b>Can I use this offline?</b> Once loaded, LOG and HISTORY work offline. AI generation requires internet.</div>
+            <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
+
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
           </div>
         )}
       </div>
