@@ -114,6 +114,9 @@ function loadYoutubeUrls(){try{return JSON.parse(localStorage.getItem("ironlog:y
 // PLAY feature: saved YouTube workout videos (Shorts or regular). Videos stored as [{id,name,url,videoId,notes}]
 function loadVideos(){try{return JSON.parse(localStorage.getItem("ironlog:videos")||"[]");}catch{return[];}}
 function saveVideos(v){try{localStorage.setItem("ironlog:videos",JSON.stringify(v));}catch(e){}}
+// Per-video session logs: { [videoId]: [{ts,date,weight,reps}] } — stored separately from workout history since videos are workouts-of-many-movements, not single exercises
+function loadVideoLogs(){try{return JSON.parse(localStorage.getItem("ironlog:video-logs")||"{}");}catch{return{};}}
+function saveVideoLogs(logs){try{localStorage.setItem("ironlog:video-logs",JSON.stringify(logs));}catch(e){}}
 function parseYouTubeId(url){if(!url)return null;const m=url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
 function youtubeThumb(vid){return vid?`https://img.youtube.com/vi/${vid}/mqdefault.jpg`:"";}
 function youtubeEmbedUrl(vid){return vid?`https://www.youtube.com/embed/${vid}?loop=1&playlist=${vid}&autoplay=1&mute=1&rel=0&modestbranding=1&playsinline=1`:"";}
@@ -679,14 +682,22 @@ const css=`
   .ai-badge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent2);text-transform:uppercase;background:rgba(255,92,53,0.08);border:1px solid rgba(255,92,53,0.25);border-radius:3px;padding:3px 7px;margin-bottom:14px;}
   .key-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;}
   /* PLAY: video library cards + mini/expanded player */
-  .vid-card{display:flex;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;align-items:center;}
+  .vid-card{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;}
+  .vid-card-top{display:flex;gap:10px;align-items:center;}
   .vid-card-thumb{width:80px;height:60px;border-radius:4px;background:var(--surface2) center/cover;flex-shrink:0;background-repeat:no-repeat;}
   .vid-card-body{flex:1;min-width:0;}
   .vid-card-name{font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .vid-card-note{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vid-card-last{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .vid-card-actions{display:flex;gap:6px;flex-shrink:0;}
   .vid-card-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--accent);font-size:14px;padding:6px 10px;cursor:pointer;}
   .vid-card-btn.danger{color:var(--danger);}
+  .vid-card-log{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px dashed var(--border);}
+  .vid-card-log input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:8px 10px;width:70px;text-align:center;min-width:0;}
+  .vid-card-log-sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:0 2px;}
+  .vid-card-log-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .vid-card-log-btn{background:var(--surface2);border:1px solid var(--accent);border-radius:5px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;padding:9px 12px;margin-left:auto;cursor:pointer;text-transform:uppercase;flex-shrink:0;}
+  .vid-card-log-btn:disabled{opacity:0.35;cursor:default;border-color:var(--border);color:var(--muted);}
   .vid-player{position:fixed;z-index:50;transition:all 0.2s ease;}
   .vid-player.mini{bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);height:76px;display:flex;align-items:center;padding:8px 10px;gap:10px;}
   .vid-player.mini .vid-frame-wrap{width:100px;height:60px;border-radius:4px;overflow:hidden;flex-shrink:0;pointer-events:none;}
@@ -1535,6 +1546,25 @@ function GymTracker(){
   const [manualAdd,setManualAdd]=useState(false);
   const _seeded=seedCuratedVideosOnce();
   const [videos,setVideos]=useState(_seeded||loadVideos());
+  const [videoLogs,setVideoLogs]=useState(loadVideoLogs());
+  const [videoInputs,setVideoInputs]=useState({});
+  const logVideoSet=videoId=>{
+    const inp=videoInputs[videoId]||{};
+    const weight=(inp.weight||"").toString().trim();
+    const reps=(inp.reps||"").toString().trim();
+    if(!weight&&!reps)return;
+    const now=new Date();
+    const entry={ts:now.getTime(),date:now.toISOString().slice(0,10),weight,reps};
+    const next={...videoLogs,[videoId]:[...(videoLogs[videoId]||[]),entry]};
+    setVideoLogs(next);saveVideoLogs(next);
+    setVideoInputs({...videoInputs,[videoId]:{weight:"",reps:""}});
+  };
+  const undoLastVideoLog=videoId=>{
+    const arr=videoLogs[videoId]||[];if(!arr.length)return;
+    if(!window.confirm("Remove the last logged entry for this video?"))return;
+    const next={...videoLogs,[videoId]:arr.slice(0,-1)};
+    setVideoLogs(next);saveVideoLogs(next);
+  };
   const [activeVideoId,setActiveVideoId]=useState(null);
   const [playerExpanded,setPlayerExpanded]=useState(false);
   const [newVideoUrl,setNewVideoUrl]=useState("");
@@ -2304,20 +2334,39 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="section-label" style={{marginTop:22}}>Your Videos {videos.length>0&&`(${videos.length})`}</div>
             {videos.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:-6,marginBottom:12,lineHeight:1.5}}>Tap a card to play. Reorder with ▲▼ to build a workout sequence.</div>}
             {videos.length===0&&<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No videos saved yet. Paste a YouTube URL above to get started.</div>}
-            {videos.map((v,i)=>(
+            {videos.map((v,i)=>{
+              const logs=videoLogs[v.id]||[];
+              const last=logs[logs.length-1];
+              const inp=videoInputs[v.id]||{};
+              const setInp=patch=>setVideoInputs({...videoInputs,[v.id]:{...inp,...patch}});
+              const lastStr=last?[last.weight?last.weight+"lb":"",last.reps?last.reps+" reps":""].filter(Boolean).join(" × "):"";
+              const lastDate=last?new Date(last.ts).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}):"";
+              return(
               <div key={v.id} className="vid-card">
-                <div className="vid-card-thumb" style={{backgroundImage:`url(${youtubeThumb(v.videoId)})`}}></div>
-                <div className="vid-card-body" onClick={()=>playVideo(v.id)} style={{cursor:"pointer"}}>
-                  <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:11,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
-                  <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":"Tap to play"}</div>
+                <div className="vid-card-top">
+                  <div className="vid-card-thumb" style={{backgroundImage:`url(${youtubeThumb(v.videoId)})`}}></div>
+                  <div className="vid-card-body" onClick={()=>playVideo(v.id)} style={{cursor:"pointer"}}>
+                    <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:11,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
+                    <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":"Tap to play"}</div>
+                  </div>
+                  <div className="vid-card-actions">
+                    <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"up")} disabled={i===0} style={{opacity:i===0?0.3:1,cursor:i===0?"default":"pointer"}} title="Move up">▲</button>
+                    <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"down")} disabled={i===videos.length-1} style={{opacity:i===videos.length-1?0.3:1,cursor:i===videos.length-1?"default":"pointer"}} title="Move down">▼</button>
+                    <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} style={{marginLeft:6}} title="Delete">✕</button>
+                  </div>
                 </div>
-                <div className="vid-card-actions">
-                  <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"up")} disabled={i===0} style={{opacity:i===0?0.3:1,cursor:i===0?"default":"pointer"}} title="Move up">▲</button>
-                  <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"down")} disabled={i===videos.length-1} style={{opacity:i===videos.length-1?0.3:1,cursor:i===videos.length-1?"default":"pointer"}} title="Move down">▼</button>
-                  <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} style={{marginLeft:6}} title="Delete">✕</button>
+                {last&&<div className="vid-card-last">LAST: {lastStr} · {lastDate}{logs.length>1&&<span style={{color:"var(--muted)",marginLeft:6}}>({logs.length} sessions)</span>}</div>}
+                <div className="vid-card-log">
+                  <input className="set-input" type="number" inputMode="decimal" placeholder="lb" value={inp.weight||""} onChange={e=>setInp({weight:e.target.value})} style={{maxWidth:70}}/>
+                  <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LB</span>
+                  <input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={inp.reps||""} onChange={e=>setInp({reps:e.target.value})} style={{maxWidth:70}}/>
+                  <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>REPS</span>
+                  <button className="btn btn-accent" onClick={()=>logVideoSet(v.id)} disabled={!(inp.weight||inp.reps)} style={{padding:"6px 12px",fontSize:10,letterSpacing:2,marginLeft:"auto",opacity:(inp.weight||inp.reps)?1:0.4}}>LOG</button>
+                  {last&&<button onClick={()=>undoLastVideoLog(v.id)} title="Undo last log" style={{background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer",padding:"4px 6px"}}>↶</button>}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
