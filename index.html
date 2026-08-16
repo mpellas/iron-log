@@ -1557,6 +1557,12 @@ function GymTracker(){
     setVideos(next);saveVideos(next);
     if(activeVideoId===id){setActiveVideoId(null);setPlayerExpanded(false);}
   };
+  const moveVideo=(id,dir)=>{
+    const i=videos.findIndex(v=>v.id===id);if(i<0)return;
+    const j=dir==="up"?i-1:i+1;if(j<0||j>=videos.length)return;
+    const next=[...videos];[next[i],next[j]]=[next[j],next[i]];
+    setVideos(next);saveVideos(next);
+  };
   const [selectedMuscle,setSelectedMuscle]=useState("Chest");
   const [selectedExercise,setSelectedExercise]=useState(getMergedLibrary()["Chest"][0]);
   const [note,setNote]=useState(_draft?.note||"");
@@ -2296,17 +2302,19 @@ Respond ONLY with valid JSON in this exact format (no other text):
             {videoAddError&&<div style={{color:"var(--danger)",fontFamily:"IBM Plex Mono",fontSize:11,marginBottom:12}}>{videoAddError}</div>}
 
             <div className="section-label" style={{marginTop:22}}>Your Videos {videos.length>0&&`(${videos.length})`}</div>
+            {videos.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:-6,marginBottom:12,lineHeight:1.5}}>Tap a card to play. Reorder with ▲▼ to build a workout sequence.</div>}
             {videos.length===0&&<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No videos saved yet. Paste a YouTube URL above to get started.</div>}
-            {videos.map(v=>(
+            {videos.map((v,i)=>(
               <div key={v.id} className="vid-card">
                 <div className="vid-card-thumb" style={{backgroundImage:`url(${youtubeThumb(v.videoId)})`}}></div>
                 <div className="vid-card-body" onClick={()=>playVideo(v.id)} style={{cursor:"pointer"}}>
-                  <div className="vid-card-name">{v.name}</div>
+                  <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:11,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
                   <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":"Tap to play"}</div>
                 </div>
                 <div className="vid-card-actions">
-                  <button className="vid-card-btn" onClick={()=>playVideo(v.id)} title="Play">▶</button>
-                  <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} title="Delete">✕</button>
+                  <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"up")} disabled={i===0} style={{opacity:i===0?0.3:1,cursor:i===0?"default":"pointer"}} title="Move up">▲</button>
+                  <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"down")} disabled={i===videos.length-1} style={{opacity:i===videos.length-1?0.3:1,cursor:i===videos.length-1?"default":"pointer"}} title="Move down">▼</button>
+                  <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} style={{marginLeft:6}} title="Delete">✕</button>
                 </div>
               </div>
             ))}
