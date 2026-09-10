@@ -693,6 +693,11 @@ const css=`
   .vid-card-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--accent);font-size:14px;padding:6px 10px;cursor:pointer;}
   .vid-card-btn.danger{color:var(--danger);}
   .vid-card-log{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px dashed var(--border);}
+  .vid-card-notes{padding:8px 0;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;}
+  .vid-card-notes-text{color:var(--text);white-space:pre-wrap;cursor:pointer;}
+  .vid-card-notes-empty{color:var(--muted);cursor:pointer;font-style:italic;}
+  .vid-card-notes textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px;line-height:1.4;resize:vertical;box-sizing:border-box;}
+  .vid-card-notes-actions{display:flex;gap:6px;margin-top:6px;}
   .vid-card-log input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:8px 10px;width:70px;text-align:center;min-width:0;}
   .vid-card-log-sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:0 2px;}
   .vid-card-log-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
@@ -1569,6 +1574,12 @@ function GymTracker(){
   const [playerExpanded,setPlayerExpanded]=useState(false);
   const [newVideoUrl,setNewVideoUrl]=useState("");
   const [newVideoName,setNewVideoName]=useState("");
+  const [newVideoNotes,setNewVideoNotes]=useState("");
+  const [editingNotesFor,setEditingNotesFor]=useState(null);
+  const [notesDraft,setNotesDraft]=useState("");
+  const startEditNotes=v=>{setEditingNotesFor(v.id);setNotesDraft(v.notes||"");};
+  const saveNotes=id=>{const next=videos.map(v=>v.id===id?{...v,notes:notesDraft}:v);setVideos(next);saveVideos(next);setEditingNotesFor(null);setNotesDraft("");};
+  const cancelEditNotes=()=>{setEditingNotesFor(null);setNotesDraft("");};
   const [videoAddError,setVideoAddError]=useState("");
   useEffect(()=>{document.body.classList.toggle("has-mini-player",!!activeVideoId&&!playerExpanded);return()=>document.body.classList.remove("has-mini-player");},[activeVideoId,playerExpanded]);
   const activeVideo=videos.find(v=>v.id===activeVideoId)||null;
@@ -1578,8 +1589,8 @@ function GymTracker(){
     if(!vid){setVideoAddError("Not a valid YouTube URL. Try a Shorts or watch link.");return;}
     if(videos.some(v=>v.videoId===vid)){setVideoAddError("You already saved that video.");return;}
     const nm=newVideoName.trim()||"Untitled workout";
-    const next=[...videos,{id:generateId(),name:nm,url:newVideoUrl.trim(),videoId:vid,notes:""}];
-    setVideos(next);saveVideos(next);setNewVideoUrl("");setNewVideoName("");setVideoAddError("");
+    const next=[...videos,{id:generateId(),name:nm,url:newVideoUrl.trim(),videoId:vid,notes:newVideoNotes.trim()}];
+    setVideos(next);saveVideos(next);setNewVideoUrl("");setNewVideoName("");setNewVideoNotes("");setVideoAddError("");
   };
   const deleteVideo=id=>{
     if(!window.confirm("Delete this video from your library?"))return;
@@ -2328,6 +2339,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="section-label">Add a Video</div>
             <input className="input" style={{marginBottom:8}} placeholder="Paste a YouTube URL (Shorts or watch link)" value={newVideoUrl} onChange={e=>{setNewVideoUrl(e.target.value);setVideoAddError("");}}/>
             <input className="input" style={{marginBottom:8}} placeholder="Name it (e.g. 'DB combo #3')" value={newVideoName} onChange={e=>setNewVideoName(e.target.value)}/>
+            <textarea className="input" style={{marginBottom:8,resize:"vertical",minHeight:60,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}} placeholder="Optional: notes / exercise list (e.g. Lateral Raise, Curl to Press, Reverse Fly)" value={newVideoNotes} onChange={e=>setNewVideoNotes(e.target.value)} rows={2}/>
             <button className="btn btn-accent" style={{width:"100%",marginBottom:6}} onClick={addVideo}>ADD TO LIBRARY</button>
             {videoAddError&&<div style={{color:"var(--danger)",fontFamily:"IBM Plex Mono",fontSize:11,marginBottom:12}}>{videoAddError}</div>}
 
@@ -2354,6 +2366,21 @@ Respond ONLY with valid JSON in this exact format (no other text):
                     <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"down")} disabled={i===videos.length-1} style={{opacity:i===videos.length-1?0.3:1,cursor:i===videos.length-1?"default":"pointer"}} title="Move down">▼</button>
                     <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} style={{marginLeft:6}} title="Delete">✕</button>
                   </div>
+                </div>
+                <div className="vid-card-notes">
+                  {editingNotesFor===v.id?(
+                    <>
+                      <textarea value={notesDraft} onChange={e=>setNotesDraft(e.target.value)} placeholder="Exercises, tips, notes..." rows={4} autoFocus/>
+                      <div className="vid-card-notes-actions">
+                        <button className="btn btn-accent" style={{padding:"4px 12px",fontSize:10,letterSpacing:2}} onClick={()=>saveNotes(v.id)}>SAVE</button>
+                        <button style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"4px 12px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={cancelEditNotes}>CANCEL</button>
+                      </div>
+                    </>
+                  ):v.notes&&v.notes.trim()?(
+                    <div className="vid-card-notes-text" onClick={()=>startEditNotes(v)} title="Tap to edit">{v.notes}</div>
+                  ):(
+                    <div className="vid-card-notes-empty" onClick={()=>startEditNotes(v)}>+ Add notes (exercises, tips)</div>
+                  )}
                 </div>
                 {last&&<div className="vid-card-last">LAST: {lastStr} · {lastDate}{logs.length>1&&<span style={{color:"var(--muted)",marginLeft:6}}>({logs.length} sessions)</span>}</div>}
                 <div className="vid-card-log">
