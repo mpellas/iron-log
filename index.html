@@ -112,11 +112,21 @@ function toggleDifficultExercise(name){
 }
 function loadYoutubeUrls(){try{return JSON.parse(localStorage.getItem("ironlog:ytlinks")||"{}");}catch{return{};}}
 // PLAY feature: saved YouTube workout videos (Shorts or regular). Videos stored as [{id,name,url,videoId,notes}]
-function loadVideos(){try{return JSON.parse(localStorage.getItem("ironlog:videos")||"[]");}catch{return[];}}
+function loadVideos(){try{const raw=JSON.parse(localStorage.getItem("ironlog:videos")||"[]");const migrated=raw.map(migrateVideoToV2);if(migrated.some((v,i)=>v!==raw[i]))saveVideos(migrated);return migrated;}catch{return[];}}
 function saveVideos(v){try{localStorage.setItem("ironlog:videos",JSON.stringify(v));}catch(e){}}
 // Per-video session logs: { [videoId]: [{ts,date,weight,reps}] } — stored separately from workout history since videos are workouts-of-many-movements, not single exercises
 function loadVideoLogs(){try{return JSON.parse(localStorage.getItem("ironlog:video-logs")||"{}");}catch{return{};}}
 function saveVideoLogs(logs){try{localStorage.setItem("ironlog:video-logs",JSON.stringify(logs));}catch(e){}}
+// Video v2: exercises are now structured, tips remain freeform. Migrate notes → exercises line-by-line.
+function migrateVideoToV2(v){
+  if(v.exercises)return v; // already migrated
+  const lines=(v.notes||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const exercises=lines.map(l=>({id:Math.random().toString(36).slice(2,10),name:l}));
+  return{...v,exercises,tips:""};
+}
+// LVL3 sessions: cross-video circuits, stored separately. { id, ts, date, status, entries: [{id, name, sourceVideoId, sourceVideoName, weight, reps, done}] }
+function loadLvl3Sessions(){try{return JSON.parse(localStorage.getItem("ironlog:lvl3-sessions")||"[]");}catch{return[];}}
+function saveLvl3Sessions(s){try{localStorage.setItem("ironlog:lvl3-sessions",JSON.stringify(s));}catch(e){}}
 function parseYouTubeId(url){if(!url)return null;const m=url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
 function youtubeThumb(vid){return vid?`https://img.youtube.com/vi/${vid}/mqdefault.jpg`:"";}
 function youtubeEmbedUrl(vid){return vid?`https://www.youtube.com/embed/${vid}?loop=1&playlist=${vid}&autoplay=1&mute=1&rel=0&modestbranding=1&playsinline=1`:"";}
@@ -134,7 +144,7 @@ function seedCuratedVideosOnce(){
     if(localStorage.getItem("ironlog:seeded-videos-v1"))return null;
     const existing=loadVideos();
     const existingIds=new Set(existing.map(v=>v.videoId));
-    const additions=CURATED_VIDEOS.filter(v=>!existingIds.has(v.videoId)).map(v=>({id:Math.random().toString(36).slice(2,10),name:v.name,url:v.url,videoId:v.videoId,notes:""}));
+    const additions=CURATED_VIDEOS.filter(v=>!existingIds.has(v.videoId)).map(v=>({id:Math.random().toString(36).slice(2,10),name:v.name,url:v.url,videoId:v.videoId,exercises:[],tips:""}));
     if(!additions.length){localStorage.setItem("ironlog:seeded-videos-v1","1");return null;}
     const merged=[...existing,...additions];
     saveVideos(merged);
@@ -698,6 +708,34 @@ const css=`
   .vid-card-notes-empty{color:var(--muted);cursor:pointer;font-style:italic;}
   .vid-card-notes textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px;line-height:1.4;resize:vertical;box-sizing:border-box;}
   .vid-card-notes-actions{display:flex;gap:6px;margin-top:6px;}
+  .vid-exercises{padding:8px 0;border-top:1px solid var(--border);}
+  .vid-exercises-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;}
+  .vid-ex-row{display:flex;align-items:center;padding:4px 6px;background:var(--surface2);border-radius:4px;margin-bottom:4px;gap:8px;}
+  .vid-ex-name{flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);word-break:break-word;}
+  .vid-ex-remove{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 6px;flex-shrink:0;}
+  .vid-ex-remove:hover{color:var(--danger);}
+  .vid-ex-add{display:flex;gap:6px;margin-top:6px;align-items:center;}
+  .vid-ex-add input{flex:1;min-width:0;}
+  .vid-tips{padding:8px 0 0;border-top:1px solid var(--border);margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.5;}
+  .vid-tips-text{color:var(--text);cursor:pointer;white-space:pre-wrap;}
+  .vid-tips-empty{color:var(--muted);cursor:pointer;font-style:italic;}
+  .vid-tips textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px;line-height:1.4;resize:vertical;box-sizing:border-box;}
+  /* LVL3 tab */
+  .lvl3-session-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;}
+  .lvl3-session-detail{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+  .lvl3-detail-row{display:flex;align-items:center;padding:6px 0;gap:8px;border-bottom:1px solid var(--border);}
+  .lvl3-detail-row:last-child{border-bottom:none;}
+  .lvl3-draft-row{display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:6px;gap:6px;}
+  .lvl3-draft-name{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;}
+  .lvl3-draft-src{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;}
+  .lvl3-pool-group{margin-bottom:14px;}
+  .lvl3-pool-src{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;padding-bottom:2px;border-bottom:1px solid var(--border);}
+  .lvl3-pool-item{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;text-align:left;}
+  .lvl3-pool-item:hover{background:var(--surface);border-color:var(--accent);}
+  .lvl3-workout-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;}
+  .lvl3-workout-row.done{border-color:var(--accent);opacity:0.75;}
+  .lvl3-workout-header{display:flex;align-items:center;margin-bottom:8px;}
+  .lvl3-workout-inputs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .vid-card-log input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:8px 10px;width:70px;text-align:center;min-width:0;}
   .vid-card-log-sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:0 2px;}
   .vid-card-log-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
@@ -1575,11 +1613,58 @@ function GymTracker(){
   const [newVideoUrl,setNewVideoUrl]=useState("");
   const [newVideoName,setNewVideoName]=useState("");
   const [newVideoNotes,setNewVideoNotes]=useState("");
-  const [editingNotesFor,setEditingNotesFor]=useState(null);
-  const [notesDraft,setNotesDraft]=useState("");
-  const startEditNotes=v=>{setEditingNotesFor(v.id);setNotesDraft(v.notes||"");};
-  const saveNotes=id=>{const next=videos.map(v=>v.id===id?{...v,notes:notesDraft}:v);setVideos(next);saveVideos(next);setEditingNotesFor(null);setNotesDraft("");};
-  const cancelEditNotes=()=>{setEditingNotesFor(null);setNotesDraft("");};
+  // Per-video exercise + tips management
+  const [newExInputs,setNewExInputs]=useState({}); // {videoId: "typed name"}
+  const [editingTipsFor,setEditingTipsFor]=useState(null);
+  const [tipsDraft,setTipsDraft]=useState("");
+  const addExerciseToVideo=(vid)=>{
+    const nm=((newExInputs[vid]||"")+"").trim();if(!nm)return;
+    const next=videos.map(v=>v.id===vid?{...v,exercises:[...(v.exercises||[]),{id:generateId(),name:nm}]}:v);
+    setVideos(next);saveVideos(next);
+    setNewExInputs({...newExInputs,[vid]:""});
+  };
+  const removeExerciseFromVideo=(vid,exId)=>{
+    const next=videos.map(v=>v.id===vid?{...v,exercises:(v.exercises||[]).filter(e=>e.id!==exId)}:v);
+    setVideos(next);saveVideos(next);
+  };
+  const startEditTips=v=>{setEditingTipsFor(v.id);setTipsDraft(v.tips||"");};
+  const saveTips=id=>{const next=videos.map(v=>v.id===id?{...v,tips:tipsDraft}:v);setVideos(next);saveVideos(next);setEditingTipsFor(null);setTipsDraft("");};
+  const cancelEditTips=()=>{setEditingTipsFor(null);setTipsDraft("");};
+  // LVL3 state
+  const [lvl3Sessions,setLvl3Sessions]=useState(loadLvl3Sessions());
+  const [lvl3View,setLvl3View]=useState("list"); // list | build | workout
+  const [lvl3Draft,setLvl3Draft]=useState(null); // {id, entries:[]}
+  const [lvl3ViewingSession,setLvl3ViewingSession]=useState(null);
+  // pool = union of all video exercises with source refs
+  const lvl3Pool=(()=>{
+    const items=[];
+    videos.forEach(v=>{(v.exercises||[]).forEach(ex=>{items.push({exerciseId:ex.id,name:ex.name,sourceVideoId:v.id,sourceVideoName:v.name});});});
+    return items;
+  })();
+  const startNewLvl3Session=()=>{setLvl3Draft({id:generateId(),entries:[]});setLvl3View("build");};
+  const addToLvl3Draft=(poolItem)=>{setLvl3Draft(d=>({...d,entries:[...d.entries,{id:generateId(),name:poolItem.name,sourceVideoId:poolItem.sourceVideoId,sourceVideoName:poolItem.sourceVideoName,weight:"",reps:"",done:false}]}));};
+  const removeFromLvl3Draft=(entryId)=>{setLvl3Draft(d=>({...d,entries:d.entries.filter(e=>e.id!==entryId)}));};
+  const moveLvl3Entry=(entryId,dir)=>{setLvl3Draft(d=>{const i=d.entries.findIndex(e=>e.id===entryId);if(i<0)return d;const j=dir==="up"?i-1:i+1;if(j<0||j>=d.entries.length)return d;const next=[...d.entries];[next[i],next[j]]=[next[j],next[i]];return{...d,entries:next};});};
+  const startLvl3Workout=()=>{if(!lvl3Draft||!lvl3Draft.entries.length)return;setLvl3View("workout");};
+  const updateLvl3Entry=(entryId,patch)=>{setLvl3Draft(d=>({...d,entries:d.entries.map(e=>e.id===entryId?{...e,...patch}:e)}));};
+  const saveLvl3Session=()=>{
+    if(!lvl3Draft||!lvl3Draft.entries.length)return;
+    const now=new Date();
+    const session={id:lvl3Draft.id,ts:now.getTime(),date:now.toISOString().slice(0,10),entries:lvl3Draft.entries};
+    const next=[session,...lvl3Sessions];
+    setLvl3Sessions(next);saveLvl3Sessions(next);
+    setLvl3Draft(null);setLvl3View("list");
+  };
+  const cancelLvl3Draft=()=>{
+    if(lvl3Draft&&lvl3Draft.entries.length&&!window.confirm("Discard this session?"))return;
+    setLvl3Draft(null);setLvl3View("list");
+  };
+  const deleteLvl3Session=(id)=>{
+    if(!window.confirm("Delete this session?"))return;
+    const next=lvl3Sessions.filter(s=>s.id!==id);
+    setLvl3Sessions(next);saveLvl3Sessions(next);
+    if(lvl3ViewingSession&&lvl3ViewingSession.id===id)setLvl3ViewingSession(null);
+  };
   const [videoAddError,setVideoAddError]=useState("");
   useEffect(()=>{document.body.classList.toggle("has-mini-player",!!activeVideoId&&!playerExpanded);return()=>document.body.classList.remove("has-mini-player");},[activeVideoId,playerExpanded]);
   const activeVideo=videos.find(v=>v.id===activeVideoId)||null;
@@ -1589,7 +1674,9 @@ function GymTracker(){
     if(!vid){setVideoAddError("Not a valid YouTube URL. Try a Shorts or watch link.");return;}
     if(videos.some(v=>v.videoId===vid)){setVideoAddError("You already saved that video.");return;}
     const nm=newVideoName.trim()||"Untitled workout";
-    const next=[...videos,{id:generateId(),name:nm,url:newVideoUrl.trim(),videoId:vid,notes:newVideoNotes.trim()}];
+    const lines=(newVideoNotes||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const exercises=lines.map(l=>({id:generateId(),name:l}));
+    const next=[...videos,{id:generateId(),name:nm,url:newVideoUrl.trim(),videoId:vid,exercises,tips:""}];
     setVideos(next);saveVideos(next);setNewVideoUrl("");setNewVideoName("");setNewVideoNotes("");setVideoAddError("");
   };
   const deleteVideo=id=>{
@@ -2049,7 +2136,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
         </div>
 
         <div className="nav">
-          {[["log","LOG"],["history","HISTORY"],["progress","GAINS"],["ai","AI REC"],["play","PLAY"],["help","HELP"]].map(([id,label])=>(
+          {[["log","LOG"],["history","HISTORY"],["progress","GAINS"],["ai","AI REC"],["play","PLAY"],["lvl3","LVL3"],["help","HELP"]].map(([id,label])=>(
             <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -2273,6 +2360,118 @@ Respond ONLY with valid JSON in this exact format (no other text):
             )}
           </div>
         )}
+        {tab==="lvl3"&&(
+          <div className="content">
+            <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>LVL3 · CIRCUITS</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:16,lineHeight:1.5}}>Build a circuit from exercises across your videos. Continuous flow, tracked over time.</div>
+
+            {lvl3View==="list"&&(<>
+              <button className="btn btn-accent" style={{width:"100%",marginBottom:14}} onClick={startNewLvl3Session} disabled={lvl3Pool.length===0}>+ NEW CIRCUIT SESSION</button>
+              {lvl3Pool.length===0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",textAlign:"center",padding:"20px",lineHeight:1.6}}>No exercises yet.<br/>Add exercises to your videos in PLAY, then start a circuit here.</div>}
+              {lvl3Pool.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:14}}>Pool: {lvl3Pool.length} exercises across {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size} videos</div>}
+
+              <div className="section-label">Past Sessions</div>
+              {lvl3Sessions.length===0&&<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:11}}>No sessions yet.</div>}
+              {lvl3Sessions.map(s=>{
+                const done=s.entries.filter(e=>e.done).length;
+                const date=new Date(s.ts).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+                return(
+                <div key={s.id} className="lvl3-session-card" onClick={()=>setLvl3ViewingSession(lvl3ViewingSession&&lvl3ViewingSession.id===s.id?null:s)}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontFamily:"Bebas Neue",fontSize:16,color:"var(--accent)",letterSpacing:1}}>{date}</div>
+                      <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{s.entries.length} exercises · {done} logged</div>
+                    </div>
+                    <button onClick={e=>{e.stopPropagation();deleteLvl3Session(s.id);}} className="vid-card-btn danger" title="Delete">✕</button>
+                  </div>
+                  {lvl3ViewingSession&&lvl3ViewingSession.id===s.id&&<div className="lvl3-session-detail">
+                    {s.entries.map(e=>(
+                      <div key={e.id} className="lvl3-detail-row">
+                        <div style={{flex:1}}>
+                          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{e.name}</div>
+                          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
+                        </div>
+                        <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:e.done?"var(--accent)":"var(--muted)"}}>
+                          {e.done?`${e.weight?e.weight+"lb × ":""}${e.reps||"–"} reps`:"skipped"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>}
+                </div>
+                );
+              })}
+            </>)}
+
+            {lvl3View==="build"&&lvl3Draft&&(<>
+              <div className="section-label">Building Session ({lvl3Draft.entries.length})</div>
+              {lvl3Draft.entries.length===0&&<div style={{color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:11,padding:"10px 0",fontStyle:"italic"}}>Pick exercises from the pool below.</div>}
+              {lvl3Draft.entries.map((e,i)=>(
+                <div key={e.id} className="lvl3-draft-row">
+                  <span style={{color:"var(--muted)",fontSize:10,fontFamily:"IBM Plex Mono",marginRight:6}}>#{i+1}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div className="lvl3-draft-name">{e.name}</div>
+                    <div className="lvl3-draft-src">{e.sourceVideoName}</div>
+                  </div>
+                  <button className="vid-card-btn" onClick={()=>moveLvl3Entry(e.id,"up")} disabled={i===0} style={{opacity:i===0?0.3:1}} title="Move up">▲</button>
+                  <button className="vid-card-btn" onClick={()=>moveLvl3Entry(e.id,"down")} disabled={i===lvl3Draft.entries.length-1} style={{opacity:i===lvl3Draft.entries.length-1?0.3:1}} title="Move down">▼</button>
+                  <button className="vid-card-btn danger" onClick={()=>removeFromLvl3Draft(e.id)} title="Remove">✕</button>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:6,marginTop:12,marginBottom:18}}>
+                <button className="btn btn-accent" style={{flex:1}} onClick={startLvl3Workout} disabled={lvl3Draft.entries.length===0}>START WORKOUT →</button>
+                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={cancelLvl3Draft}>CANCEL</button>
+              </div>
+              <div className="section-label">Exercise Pool</div>
+              {(()=>{
+                // group pool by video
+                const bySource={};
+                lvl3Pool.forEach(p=>{if(!bySource[p.sourceVideoId])bySource[p.sourceVideoId]={name:p.sourceVideoName,items:[]};bySource[p.sourceVideoId].items.push(p);});
+                return Object.entries(bySource).map(([sid,grp])=>(
+                  <div key={sid} className="lvl3-pool-group">
+                    <div className="lvl3-pool-src">{grp.name}</div>
+                    {grp.items.map(item=>(
+                      <button key={item.exerciseId} className="lvl3-pool-item" onClick={()=>addToLvl3Draft(item)}>
+                        <span>{item.name}</span>
+                        <span style={{color:"var(--accent)",fontSize:14,marginLeft:6}}>+</span>
+                      </button>
+                    ))}
+                  </div>
+                ));
+              })()}
+            </>)}
+
+            {lvl3View==="workout"&&lvl3Draft&&(<>
+              <div className="section-label">Workout In Progress</div>
+              <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:12}}>Log each exercise as you finish it. Tap DONE to mark complete.</div>
+              {lvl3Draft.entries.map((e,i)=>(
+                <div key={e.id} className={"lvl3-workout-row"+(e.done?" done":"")}>
+                  <div className="lvl3-workout-header">
+                    <span style={{color:"var(--muted)",fontSize:10,fontFamily:"IBM Plex Mono",marginRight:8}}>#{i+1}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontFamily:"'IBM Plex Sans',sans-serif",fontSize:13,fontWeight:600,color:e.done?"var(--muted)":"var(--text)",textDecoration:e.done?"line-through":"none"}}>{e.name}</div>
+                      <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
+                    </div>
+                  </div>
+                  <div className="lvl3-workout-inputs">
+                    <input className="set-input" type="number" inputMode="decimal" placeholder="lb" value={e.weight} onChange={ev=>updateLvl3Entry(e.id,{weight:ev.target.value})} style={{maxWidth:70}} disabled={e.done}/>
+                    <span className="set-label" style={{fontSize:8}}>LB</span>
+                    <input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={e.reps} onChange={ev=>updateLvl3Entry(e.id,{reps:ev.target.value})} style={{maxWidth:70}} disabled={e.done}/>
+                    <span className="set-label" style={{fontSize:8}}>REPS</span>
+                    {!e.done?(
+                      <button className="btn btn-accent" style={{marginLeft:"auto",padding:"6px 12px",fontSize:10,letterSpacing:2}} onClick={()=>updateLvl3Entry(e.id,{done:true})}>DONE</button>
+                    ):(
+                      <button style={{marginLeft:"auto",background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"6px 10px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={()=>updateLvl3Entry(e.id,{done:false})}>UNDO</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:6,marginTop:14}}>
+                <button className="btn btn-accent" style={{flex:1}} onClick={saveLvl3Session}>SAVE SESSION</button>
+                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>setLvl3View("build")}>← BACK</button>
+              </div>
+            </>)}
+          </div>
+        )}
         {tab==="help"&&(
           <div className="content help-tab">
             <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>WELCOME TO 90STRONG</div>
@@ -2347,19 +2546,15 @@ Respond ONLY with valid JSON in this exact format (no other text):
             {videos.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:-6,marginBottom:12,lineHeight:1.5}}>Tap a card to play. Reorder with ▲▼ to build a workout sequence.</div>}
             {videos.length===0&&<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No videos saved yet. Paste a YouTube URL above to get started.</div>}
             {videos.map((v,i)=>{
-              const logs=videoLogs[v.id]||[];
-              const last=logs[logs.length-1];
-              const inp=videoInputs[v.id]||{};
-              const setInp=patch=>setVideoInputs({...videoInputs,[v.id]:{...inp,...patch}});
-              const lastStr=last?[last.weight?last.weight+"lb":"",last.reps?last.reps+" reps":""].filter(Boolean).join(" × "):"";
-              const lastDate=last?new Date(last.ts).toLocaleDateString("en-US",{month:"numeric",day:"numeric"}):"";
+              const exercises=v.exercises||[];
+              const exInp=newExInputs[v.id]||"";
               return(
               <div key={v.id} className="vid-card">
                 <div className="vid-card-top">
                   <div className="vid-card-thumb" style={{backgroundImage:`url(${youtubeThumb(v.videoId)})`}}></div>
                   <div className="vid-card-body" onClick={()=>playVideo(v.id)} style={{cursor:"pointer"}}>
                     <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:11,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
-                    <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":"Tap to play"}</div>
+                    <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":`Tap to play · ${exercises.length} ${exercises.length===1?"exercise":"exercises"}`}</div>
                   </div>
                   <div className="vid-card-actions">
                     <button className="vid-card-btn" onClick={()=>moveVideo(v.id,"up")} disabled={i===0} style={{opacity:i===0?0.3:1,cursor:i===0?"default":"pointer"}} title="Move up">▲</button>
@@ -2367,29 +2562,34 @@ Respond ONLY with valid JSON in this exact format (no other text):
                     <button className="vid-card-btn danger" onClick={()=>deleteVideo(v.id)} style={{marginLeft:6}} title="Delete">✕</button>
                   </div>
                 </div>
-                <div className="vid-card-notes">
-                  {editingNotesFor===v.id?(
+                <div className="vid-exercises">
+                  <div className="vid-exercises-label">EXERCISES</div>
+                  {exercises.length===0&&<div style={{color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontStyle:"italic",padding:"2px 0 4px"}}>None yet — add one below</div>}
+                  {exercises.map(ex=>(
+                    <div key={ex.id} className="vid-ex-row">
+                      <span className="vid-ex-name">{ex.name}</span>
+                      <button className="vid-ex-remove" onClick={()=>removeExerciseFromVideo(v.id,ex.id)} title="Remove">✕</button>
+                    </div>
+                  ))}
+                  <div className="vid-ex-add">
+                    <input type="text" className="input" placeholder="+ Add exercise" value={exInp} onChange={e=>setNewExInputs({...newExInputs,[v.id]:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")addExerciseToVideo(v.id);}} style={{fontSize:11,padding:"6px 8px"}}/>
+                    <button className="btn btn-accent" onClick={()=>addExerciseToVideo(v.id)} disabled={!exInp.trim()} style={{padding:"6px 10px",fontSize:10,letterSpacing:2,opacity:exInp.trim()?1:0.4}}>ADD</button>
+                  </div>
+                </div>
+                <div className="vid-tips">
+                  {editingTipsFor===v.id?(
                     <>
-                      <textarea value={notesDraft} onChange={e=>setNotesDraft(e.target.value)} placeholder="Exercises, tips, notes..." rows={4} autoFocus/>
-                      <div className="vid-card-notes-actions">
-                        <button className="btn btn-accent" style={{padding:"4px 12px",fontSize:10,letterSpacing:2}} onClick={()=>saveNotes(v.id)}>SAVE</button>
-                        <button style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"4px 12px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={cancelEditNotes}>CANCEL</button>
+                      <textarea value={tipsDraft} onChange={e=>setTipsDraft(e.target.value)} placeholder="Tips, reminders (e.g. '3 rounds, 30s each')" rows={2} autoFocus/>
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button className="btn btn-accent" style={{padding:"4px 12px",fontSize:10,letterSpacing:2}} onClick={()=>saveTips(v.id)}>SAVE</button>
+                        <button style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"4px 12px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={cancelEditTips}>CANCEL</button>
                       </div>
                     </>
-                  ):v.notes&&v.notes.trim()?(
-                    <div className="vid-card-notes-text" onClick={()=>startEditNotes(v)} title="Tap to edit">{v.notes}</div>
+                  ):v.tips&&v.tips.trim()?(
+                    <div className="vid-tips-text" onClick={()=>startEditTips(v)} title="Tap to edit"><span style={{color:"var(--muted)"}}>TIPS: </span>{v.tips}</div>
                   ):(
-                    <div className="vid-card-notes-empty" onClick={()=>startEditNotes(v)}>+ Add notes (exercises, tips)</div>
+                    <div className="vid-tips-empty" onClick={()=>startEditTips(v)}>+ Add tips</div>
                   )}
-                </div>
-                {last&&<div className="vid-card-last">LAST: {lastStr} · {lastDate}{logs.length>1&&<span style={{color:"var(--muted)",marginLeft:6}}>({logs.length} sessions)</span>}</div>}
-                <div className="vid-card-log">
-                  <input className="set-input" type="number" inputMode="decimal" placeholder="lb" value={inp.weight||""} onChange={e=>setInp({weight:e.target.value})} style={{maxWidth:70}}/>
-                  <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LB</span>
-                  <input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={inp.reps||""} onChange={e=>setInp({reps:e.target.value})} style={{maxWidth:70}}/>
-                  <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>REPS</span>
-                  <button className="btn btn-accent" onClick={()=>logVideoSet(v.id)} disabled={!(inp.weight||inp.reps)} style={{padding:"6px 12px",fontSize:10,letterSpacing:2,marginLeft:"auto",opacity:(inp.weight||inp.reps)?1:0.4}}>LOG</button>
-                  {last&&<button onClick={()=>undoLastVideoLog(v.id)} title="Undo last log" style={{background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer",padding:"4px 6px"}}>↶</button>}
                 </div>
               </div>
               );
