@@ -1582,6 +1582,12 @@ function GymTracker(){
   const [activePlaylist,setActivePlaylist]=useState(()=>loadActivePlaylist());
   const [showPlaylistModal,setShowPlaylistModal]=useState(false);
   const [tab,setTab]=useState("log");
+  useEffect(()=>{
+    // Redirect if the current tab is hidden by the active mode (e.g. persisted LVL3 on load).
+    if(intensityLevel===3&&tab==="ai")setTab("log");
+    if(intensityLevel!==3&&tab==="lvl3")setTab("log");
+  },[intensityLevel,tab]);
+  const [playSubTab,setPlaySubTab]=useState("videos"); // videos | lvl3 — sub-tabs inside PLAY
   const [history,setHistory]=useState(()=>loadHistory());
   const _draft=loadDraftSession();
   const [exercises,setExercises]=useState(_draft?.exercises||[]);
@@ -2125,7 +2131,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="logo-sub">Workout Tracker</div>
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
               <button className="header-key" style={{marginLeft:0,fontSize:10,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>BW</button>
-              <button className="header-key" style={{marginLeft:0,fontSize:9,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===2?"var(--accent)":"var(--muted)",fontWeight:"bold"}} title={`Intensity: Level ${intensityLevel} — tap to toggle`} onClick={()=>{const nl=intensityLevel===1?2:1;setIntensityLevel(nl);saveIntensityLevel(nl);}}>LVL{intensityLevel}</button>
+              <button className="header-key" style={{marginLeft:0,fontSize:9,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===1?"var(--muted)":intensityLevel===2?"var(--accent)":"var(--accent2)",fontWeight:"bold"}} title={intensityLevel===1?"Mode: L1 Standard AI — tap to change":intensityLevel===2?"Mode: L2 High-Intensity AI — tap to change":"Mode: L3 Circuit (no AI) — tap to change"} onClick={()=>{const nl=intensityLevel===3?1:intensityLevel+1;const wasL3=intensityLevel===3;setIntensityLevel(nl);saveIntensityLevel(nl);if(nl===3)setTab("lvl3");else if(wasL3&&tab==="lvl3")setTab("log");}}>LVL{intensityLevel}</button>
               <button className="header-key" style={{marginLeft:0,opacity:playlists.length>0?1:0.35}} title="Playlists" onClick={()=>setShowPlaylistModal(true)}>🎵</button>
               <button className="header-key" style={{marginLeft:0}} title="Backup & Restore" onClick={()=>setShowDataModal(true)}>💾</button>
               <button className="header-key" style={{marginLeft:0}} title="Cardio Equipment" onClick={()=>setShowCardioModal(true)}>🏃</button>
@@ -2136,9 +2142,17 @@ Respond ONLY with valid JSON in this exact format (no other text):
         </div>
 
         <div className="nav">
-          {[["log","LOG"],["history","HISTORY"],["progress","GAINS"],["ai","AI REC"],["play","PLAY"],["lvl3","LVL3"],["help","HELP"]].map(([id,label])=>(
-            <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</button>
-          ))}
+          {(()=>{
+            const isL3=intensityLevel===3;
+            const tabs=[["log","LOG"],["history","HISTORY"],["progress","GAINS"]];
+            if(!isL3)tabs.push(["ai","AI REC"]);
+            tabs.push(["play","PLAY"]);
+            if(isL3)tabs.push(["lvl3","LVL3"]);
+            tabs.push(["help","HELP"]);
+            return tabs.map(([id,label])=>(
+              <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</button>
+            ));
+          })()}
         </div>
 
         {tab==="log"&&(
