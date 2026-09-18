@@ -70,6 +70,21 @@ function importData(file,onDone){
   reader.readAsText(file);
 }
 function loadApiKey(){return localStorage.getItem("ironlog:apikey")||"";}
+// One-tap tester onboarding: if the page loads with #key=sk-ant-... in the URL, grab it, save it,
+// and immediately strip it from the URL bar so it's not visible in history / screenshots.
+function extractKeyFromHash(){
+  try{
+    if(typeof window==="undefined"||!window.location.hash)return null;
+    const params=new URLSearchParams(window.location.hash.replace(/^#/,""));
+    const key=params.get("key");
+    if(!key||!/^sk-ant-/.test(key))return null;
+    params.delete("key");
+    const remaining=params.toString();
+    const cleanUrl=window.location.pathname+window.location.search+(remaining?"#"+remaining:"");
+    window.history.replaceState(null,"",cleanUrl);
+    return key;
+  }catch(e){return null;}
+}
 function saveApiKey(k){localStorage.setItem("ironlog:apikey",k);}
 function loadDynamicLibrary(){try{return JSON.parse(localStorage.getItem("ironlog:library")||"{}");}catch{return{};}
 }
@@ -1587,7 +1602,11 @@ class ErrorBoundary extends React.Component{
 }
 
 function GymTracker(){
-  const [apiKey,setApiKey]=useState(()=>loadApiKey());
+  const [apiKey,setApiKey]=useState(()=>{
+    const fromHash=extractKeyFromHash();
+    if(fromHash){saveApiKey(fromHash);return fromHash;}
+    return loadApiKey();
+  });
   const [showKeyModal,setShowKeyModal]=useState(false);
   const [showCardioModal,setShowCardioModal]=useState(false);
   const [cardioEquipment,setCardioEquipment]=useState(()=>loadCardioEquipment());
