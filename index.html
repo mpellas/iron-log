@@ -773,16 +773,31 @@ const css=`
   .key-note{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:10px;line-height:1.5;}
 `;
 
-function ApiKeyModal({onSave}){
+function ApiKeyModal({onSave,hasKey,onRemove,onClose}){
   const [val,setVal]=useState("");
   return(
     <div className="key-modal-overlay">
       <div className="key-modal">
         <div className="key-modal-title">90STRONG</div>
-        <div className="key-modal-desc">Paste your Anthropic API key to enable AI features. Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Stored only on this device.</div>
-        <input className="key-input" type="password" placeholder="sk-ant-..." value={val} onChange={e=>setVal(e.target.value)}/>
-        <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={()=>val.trim()&&onSave(val.trim())}>SAVE &amp; START</button>
-        <div className="key-note">KEY STORED LOCALLY · NEVER SENT ANYWHERE EXCEPT ANTHROPIC API</div>
+        {hasKey?(
+          <div className="key-modal-desc" style={{textAlign:"center"}}>
+            <div style={{color:"var(--accent)",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,fontWeight:"bold",letterSpacing:2,marginBottom:8}}>✓ KEY SAVED</div>
+            A key is currently stored on this device. Enter a new key below to replace it, remove it, or cancel.
+          </div>
+        ):(
+          <div className="key-modal-desc">
+            Paste your Anthropic API key to enable AI features. Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Stored only on this device.
+          </div>
+        )}
+        <input className="key-input" type="password" autoComplete="off" placeholder="sk-ant-..." value={val} onChange={e=>setVal(e.target.value)}/>
+        <button className="btn btn-accent" style={{width:"100%",padding:14,opacity:val.trim()?1:0.5,cursor:val.trim()?"pointer":"default"}} disabled={!val.trim()} onClick={()=>val.trim()&&onSave(val.trim())}>{hasKey?"REPLACE KEY":"SAVE & START"}</button>
+        {hasKey&&(
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
+            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--danger)",borderRadius:6,color:"var(--danger)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Remove the API key? AI features won't work until you add a new one."))onRemove();}}>REMOVE KEY</button>
+          </div>
+        )}
+        <div className="key-note">STORED LOCALLY · NEVER DISPLAYED · NEVER SENT ANYWHERE EXCEPT ANTHROPIC</div>
       </div>
     </div>
   );
@@ -1718,6 +1733,8 @@ function GymTracker(){
   const [scanResult,setScanResult]=useState(null);
 
   const handleSaveKey=(k)=>{saveApiKey(k);setApiKey(k);setShowKeyModal(false);};
+  const handleRemoveKey=()=>{saveApiKey("");setApiKey("");setShowKeyModal(false);};
+  const handleCloseKeyModal=()=>{setShowKeyModal(false);};
   const apiHeaders=()=>({"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
   const addExercise=()=>{
@@ -2120,7 +2137,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
   return(
     <>
       <style>{css}</style>
-      {(!apiKey||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey}/>}
+      {(!apiKey||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal}/>}
       {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)}/>}
       {showDataModal&&<DataModal onClose={()=>setShowDataModal(false)} onImportDone={()=>{setHistory(loadHistory());setShowDataModal(false);}}/>}
       {showPlaylistModal&&<PlaylistModal playlists={playlists} activePlaylist={activePlaylist} onSave={(list,active)=>{setPlaylists(list);setActivePlaylist(active);savePlaylists(list);saveActivePlaylist(active);}} onClose={()=>setShowPlaylistModal(false)}/>}
@@ -2144,12 +2161,10 @@ Respond ONLY with valid JSON in this exact format (no other text):
         <div className="nav">
           {(()=>{
             const isL3=intensityLevel===3;
-            const tabs=[["log","LOG"],["history","HISTORY"],["progress","GAINS"]];
+            const tabs=[["about","ABOUT"],["help","HELP"],["log","LOG"],["history","HISTORY"],["progress","GAINS"]];
             if(!isL3)tabs.push(["ai","AI REC"]);
             tabs.push(["play","PLAY"]);
             if(isL3)tabs.push(["lvl3","LVL3"]);
-            tabs.push(["about","ABOUT"]);
-            tabs.push(["help","HELP"]);
             return tabs.map(([id,label])=>(
               <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</button>
             ));
