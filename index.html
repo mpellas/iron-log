@@ -1615,7 +1615,10 @@ function GymTracker(){
   const [playlists,setPlaylists]=useState(()=>loadPlaylists());
   const [activePlaylist,setActivePlaylist]=useState(()=>loadActivePlaylist());
   const [showPlaylistModal,setShowPlaylistModal]=useState(false);
-  const [tab,setTab]=useState("log");
+  const [tab,setTab]=useState(()=>{
+    // First-time users land on ABOUT so they get oriented; returning users land on LOG as before.
+    try{const h=JSON.parse(localStorage.getItem("ironlog:history")||"[]");return h.length===0?"about":"log";}catch{return"about";}
+  });
   useEffect(()=>{
     // Redirect if the current tab is hidden by the active mode (e.g. persisted LVL3 on load).
     if(intensityLevel===3&&tab==="ai")setTab("log");
@@ -2526,21 +2529,29 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>ABOUT 90STRONG</div>
             <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A personal gym-tracking app, honestly built and shared.</div>
 
-            <div className="help-p">90Strong is a personal gym-tracking web app built for one lifter, at one gym — Planet Fitness — and shared with anyone who wants to try it. It's not a startup product. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
+            <div className="help-p">90Strong is a personal gym-tracking web app built for one lifter that uses Planet Fitness (but could be used anywhere) and shared with anyone who wants to try it. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
 
             <div className="help-p">It's built around a specific way of training: variety over rigid programs, honest tracking of what you actually lifted, and quick logging that doesn't get in the way mid-workout. Exercises and AI recommendations assume Planet Fitness equipment — no free barbells, Smith machines, the PF360 rig, TRX, the TRUE Stretch cage, and the Total Gym Elevate Core. Manual logging works for any gym.</div>
 
             <div className="section-label">What's Inside</div>
+            <div className="help-p"><b>HELP</b> — how to use each part</div>
             <div className="help-p"><b>LOG</b> — record your workouts one exercise at a time</div>
             <div className="help-p"><b>HISTORY</b> — every past session</div>
             <div className="help-p"><b>GAINS</b> — progression charts per exercise</div>
-            <div className="help-p"><b>AI REC</b> — optional AI-generated Planet Fitness workouts (uses your own Anthropic API key)</div>
+            <div className="help-p"><b>AI REC</b> — If not in Level 3, an optional AI-generated Planet Fitness workouts (uses your own Anthropic API key)</div>
             <div className="help-p"><b>PLAY</b> — a YouTube video library for workouts you follow along with</div>
             <div className="help-p"><b>LVL3</b> — circuit mode: build sessions by combining exercises across your videos, log as you flow through</div>
-            <div className="help-p"><b>HELP</b> — how to use each part</div>
 
             <div className="section-label">Modes</div>
             <div className="help-p">The <b>LVL</b> button in the top header switches between three modes: <b>LVL1</b> (standard AI-driven workouts), <b>LVL2</b> (high-intensity AI-driven workouts), and <b>LVL3</b> (circuit workouts built from your video library, no AI). The nav updates to show what's relevant to the current mode.</div>
+
+            <div className="section-label">Getting Started (LVL1)</div>
+            <div className="help-p"><b>1.</b> Set your bodyweight via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
+            <div className="help-p"><b>2.</b> Add your API key via the <b>⚙</b> icon (or you'll be prompted). Get one at console.anthropic.com. It stays on your device, never displayed.</div>
+            <div className="help-p"><b>3.</b> Tap <b>AI REC</b> in the nav, pick a focus (Push / Pull / Legs / Full Body), and hit generate. A workout plan will appear in about 20 seconds.</div>
+            <div className="help-p"><b>4.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE SESSION</b> when finished.</div>
+            <div className="help-p"><b>5.</b> Over time, check <b>GAINS</b> to see individual exercises trending up, and <b>HISTORY</b> for past sessions.</div>
+            <div className="help-p">If AI isn't your thing, skip step 3 and go straight to LOG — add exercises manually and log as you go. Everything works without a key except AI REC.</div>
 
             <div className="section-label">A Few Things Worth Knowing</div>
             <div className="help-p">Your data lives in your browser on the device you're using, so it's a good idea to back up regularly via the <b>💾</b> Export button in the header.</div>
