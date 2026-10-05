@@ -28,6 +28,12 @@ const {useState,useEffect,useRef} = React;
 function loadHistory(){try{return JSON.parse(localStorage.getItem("ironlog:history")||"[]");}catch{return[];}}
 function saveHistory(h){try{localStorage.setItem("ironlog:history",JSON.stringify(h));}catch(e){}}
 function exportData(){
+  // Pull videos/video-logs/lvl3-sessions straight from localStorage so this file doesn't depend on
+  // the GymTracker helpers being hoisted above it.
+  let videos=[],videoLogs={},lvl3Sessions=[];
+  try{videos=JSON.parse(localStorage.getItem("ironlog:videos")||"[]");}catch(e){}
+  try{videoLogs=JSON.parse(localStorage.getItem("ironlog:video-logs")||"{}");}catch(e){}
+  try{lvl3Sessions=JSON.parse(localStorage.getItem("ironlog:lvl3-sessions")||"[]");}catch(e){}
   const data={
     history:loadHistory(),
     dynamicLibrary:loadDynamicLibrary(),
@@ -38,8 +44,12 @@ function exportData(){
     intensityLevel:loadIntensityLevel(),
     cardioEquipment:loadCardioEquipment(),
     playlists:loadPlaylists(),activePlaylist:loadActivePlaylist(),
+    videos,
+    videoLogs,
+    lvl3Sessions,
+    profile:loadProfile(),
     exportedAt:new Date().toISOString(),
-    version:"90strong-v1"
+    version:"90strong-v3"
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);
@@ -48,28 +58,103 @@ function exportData(){
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
+// Hoisted URL sanitizer — used by import AND by any component rendering a user-supplied link.
+// Rejects javascript:, data:, vbscript: etc. Only https:// to YouTube hosts is allowed.
+function isSafeYoutubeUrl(raw){
+  if(!raw||typeof raw!=="string")return false;
+  try{
+    const u=new URL(raw.trim());
+    if(u.protocol!=="https:"&&u.protocol!=="http:")return false;
+    const host=u.hostname.toLowerCase().replace(/^www\./,"");
+    return host==="youtube.com"||host==="m.youtube.com"||host==="youtu.be"||host==="youtube-nocookie.com";
+  }catch(e){return false;}
+}
 function importData(file,onDone){
   const reader=new FileReader();
   reader.onload=e=>{
     try{
       const data=JSON.parse(e.target.result);
-      if(!data.version||!data.history)throw new Error("Invalid backup file");
-      if(data.history)saveHistory(data.history);
-      if(data.dynamicLibrary)saveDynamicLibrary(data.dynamicLibrary);
-      if(data.youtubeLinks)localStorage.setItem("ironlog:ytlinks",JSON.stringify(data.youtubeLinks));
-      if(data.difficultExercises)localStorage.setItem("ironlog:difficult",JSON.stringify(data.difficultExercises));
-      if(data.unavailableExercises)localStorage.setItem("ironlog:unavailable",JSON.stringify(data.unavailableExercises));
-      if(data.bodyweight)saveBodyweight(data.bodyweight);
-      if(data.intensityLevel)saveIntensityLevel(data.intensityLevel);
-      if(data.cardioEquipment)localStorage.setItem("ironlog:cardio",JSON.stringify(data.cardioEquipment));
-      if(data.playlists)savePlaylists(data.playlists);
+      if(!data||typeof data!=="object"||!data.version||!data.history||!Array.isArray(data.history))throw new Error("Invalid backup file");
+      saveHistory(data.history);
+      if(data.dynamicLibrary&&typeof data.dynamicLibrary==="object")saveDynamicLibrary(data.dynamicLibrary);
+      // youtubeLinks: filter out any entry whose URL isn't a safe YouTube link (protects against javascript: injection via tampered backups)
+      if(data.youtubeLinks&&typeof data.youtubeLinks==="object"){
+        const clean={};Object.entries(data.youtubeLinks).forEach(([k,v])=>{if(isSafeYoutubeUrl(v))clean[k]=v;});
+        localStorage.setItem("ironlog:ytlinks",JSON.stringify(clean));
+      }
+      if(Array.isArray(data.difficultExercises))localStorage.setItem("ironlog:difficult",JSON.stringify(data.difficultExercises));
+      if(Array.isArray(data.unavailableExercises))localStorage.setItem("ironlog:unavailable",JSON.stringify(data.unavailableExercises));
+      if(typeof data.bodyweight==="number"||typeof data.bodyweight==="string")saveBodyweight(data.bodyweight);
+      if(data.intensityLevel===1||data.intensityLevel===2||data.intensityLevel===3)saveIntensityLevel(data.intensityLevel);
+      if(data.cardioEquipment&&typeof data.cardioEquipment==="object")localStorage.setItem("ironlog:cardio",JSON.stringify(data.cardioEquipment));
+      if(Array.isArray(data.playlists))savePlaylists(data.playlists);
       if(data.activePlaylist)saveActivePlaylist(data.activePlaylist);
+      // v2 additions: videos, video logs, LVL3 sessions. Also sanitize video URLs for safety.
+      if(Array.isArray(data.videos)){
+        const safeVideos=data.videos.filter(v=>v&&typeof v==="object"&&isSafeYoutubeUrl(v.url));
+        localStorage.setItem("ironlog:videos",JSON.stringify(safeVideos));
+      }
+      if(data.videoLogs&&typeof data.videoLogs==="object")localStorage.setItem("ironlog:video-logs",JSON.stringify(data.videoLogs));
+      if(Array.isArray(data.lvl3Sessions))localStorage.setItem("ironlog:lvl3-sessions",JSON.stringify(data.lvl3Sessions));
+      if(data.profile&&typeof data.profile==="object")saveProfile({...DEFAULT_PROFILE,...data.profile});
       onDone(true);
     }catch(err){onDone(false,err.message);}
   };
   reader.readAsText(file);
 }
+// User profile — personal AI context + progression preferences. Replaces hardcoded "Mike" values.
+const DEFAULT_PROFILE={
+  priorityMuscle:"",
+  dumbbellMax:75,
+  dominantSide:"none",      // "none" | "right" | "left"
+  gripStrength:"average",   // "weak" | "average" | "strong"
+  armLength:"average",      // "short" | "average" | "long"
+  inclinePreference:false,  // if true, AI defaults bench to incline
+  compoundIncrement:5,      // lb to add when all reps completed
+  isolationIncrement:2.5,   // lb to add when all reps completed
+  notes:""                  // freeform additional context for the AI
+};
+function loadProfile(){
+  try{const stored=JSON.parse(localStorage.getItem("ironlog:profile")||"null");return stored?{...DEFAULT_PROFILE,...stored}:DEFAULT_PROFILE;}catch{return DEFAULT_PROFILE;}
+}
+function saveProfile(p){try{localStorage.setItem("ironlog:profile",JSON.stringify(p));}catch(e){}}
+// Build the USER CONTEXT paragraph in the AI prompt from the profile. Only emits lines for non-default values,
+// so a neutral profile produces no quirks and the AI programs generically.
+function buildUserContextFromProfile(p){
+  const lines=["IMPORTANT USER CONTEXT:"];
+  lines.push(`- Planet Fitness: Smith machines, dumbbells up to ${p.dumbbellMax||75}lb, full cable stations, standard machines. NO free barbells.`);
+  if(p.priorityMuscle)lines.push(`- PRIORITY MUSCLE: ${p.priorityMuscle} — user feels this group is lagging and wants emphasis. Allocate at least 1 extra set or an additional accessory for ${p.priorityMuscle} when the day's focus includes it.`);
+  if(p.dominantSide==="right"){
+    lines.push("- RIGHT SIDE DOMINANCE causing left-side strength imbalance.");
+    lines.push("- PRIORITIZE unilateral exercises for Back and Chest when they fit the day's focus.");
+    lines.push("- For bilateral exercises the tip should say: start with LEFT side first, match on right.");
+  } else if(p.dominantSide==="left"){
+    lines.push("- LEFT SIDE DOMINANCE causing right-side strength imbalance.");
+    lines.push("- PRIORITIZE unilateral exercises for Back and Chest when they fit the day's focus.");
+    lines.push("- For bilateral exercises the tip should say: start with RIGHT side first, match on left.");
+  }
+  if(p.inclinePreference)lines.push("- For dumbbell press variations the user PREFERS INCLINE — default to incline (30-45°) unless flat is specifically more appropriate; always state the angle in the tip.");
+  if(p.armLength==="long"){
+    lines.push("- LONG ARMS. Mechanics implications:");
+    lines.push("  * Bench press: longer ROM, more shoulder stress — cue elbows at 45-75°, not flared");
+    lines.push("  * Rows: take advantage of full ROM at the stretched bottom position");
+    lines.push("  * Overhead press: harder lockout — cue to avoid hyperextending at top");
+    lines.push("  * Dips/Pushdowns: watch elbow stress, don't lock out aggressively");
+  } else if(p.armLength==="short"){
+    lines.push("- SHORT ARMS. Mechanics implications: pressing ROM is shorter and generally more favorable; rowing ROM needs attention to full stretch.");
+  }
+  if(p.gripStrength==="weak"){
+    lines.push("- WEAK GRIP that the user is actively building.");
+    lines.push("- ALWAYS include at least one forearm or grip exercise in the FINISHER (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, Zottman Curl). Place grip work at END only — never in supersets that would pre-fatigue grip for main lifts.");
+  } else if(p.gripStrength==="strong"){
+    lines.push("- Grip is strong; no special grip finisher required.");
+  }
+  if((p.notes||"").trim())lines.push(`- ADDITIONAL USER NOTES: ${p.notes.trim()}`);
+  return lines.join("\n");
+}
 function loadApiKey(){return localStorage.getItem("ironlog:apikey")||"";}
+function loadKeySkipped(){return localStorage.getItem("ironlog:key-skipped")==="1";}
+function saveKeySkipped(v){try{if(v)localStorage.setItem("ironlog:key-skipped","1");else localStorage.removeItem("ironlog:key-skipped");}catch(e){}}
 // One-tap tester onboarding: if the page loads with #key=sk-ant-... in the URL, grab it, save it,
 // and immediately strip it from the URL bar so it's not visible in history / screenshots.
 function extractKeyFromHash(){
@@ -99,6 +184,13 @@ function addToLibrary(muscle,name){
 function loadDraftSession(){try{return JSON.parse(localStorage.getItem("ironlog:draft")||"null");}catch{return null;}}
 function saveDraftSession(exercises,note,loadedFromAI){try{localStorage.setItem("ironlog:draft",JSON.stringify({exercises,note,loadedFromAI,savedAt:Date.now()}));}catch(e){}}
 function clearDraftSession(){try{localStorage.removeItem("ironlog:draft");}catch(e){}}
+// Session timing (LVL1/LVL2) — persisted separately from draft so it survives reloads during a workout.
+// Shape: {startTime:number, endTime:number|null, exerciseTimes:{[exId]:{start:number,end:number}}}
+function loadSessionTiming(){try{return JSON.parse(localStorage.getItem("ironlog:session-timing")||"null");}catch{return null;}}
+function saveSessionTiming(t){try{if(t)localStorage.setItem("ironlog:session-timing",JSON.stringify(t));else localStorage.removeItem("ironlog:session-timing");}catch(e){}}
+function clearSessionTiming(){try{localStorage.removeItem("ironlog:session-timing");}catch(e){}}
+function formatDuration(sec){if(sec<0)sec=0;if(sec<60)return sec+"s";const m=Math.floor(sec/60);const s=sec%60;if(m<60)return m+":"+String(s).padStart(2,"0");const h=Math.floor(m/60);return h+"h "+(m%60)+"m";}
+function beep(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ctx=new AC();const osc=ctx.createOscillator();const gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=880;osc.type="sine";gain.gain.setValueAtTime(0.25,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);osc.start();osc.stop(ctx.currentTime+0.4);setTimeout(()=>{try{ctx.close();}catch(e){}},500);}catch(e){}}
 function loadPlaylists(){try{return JSON.parse(localStorage.getItem("ironlog:playlists")||"[]");}catch{return[];}}
 function savePlaylists(list){try{localStorage.setItem("ironlog:playlists",JSON.stringify(list));}catch(e){}}
 function loadActivePlaylist(){try{return JSON.parse(localStorage.getItem("ironlog:playlist-active")||"null");}catch{return null;}}
@@ -613,6 +705,7 @@ const css=`
   .nav-btn{flex:1;padding:11px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
+  .content{padding:20px;}
   .section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
   .help-p{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.65;color:var(--text);margin:0 0 14px 0;}
   .help-p b{color:var(--accent);font-weight:normal;}
@@ -758,6 +851,29 @@ const css=`
   .vid-card-log-btn:disabled{opacity:0.35;cursor:default;border-color:var(--border);color:var(--muted);}
   .vid-player{position:fixed;z-index:50;transition:all 0.2s ease;}
   .vid-player.mini{bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);height:76px;display:flex;align-items:center;padding:8px 10px;gap:10px;}
+  .session-timer{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;}
+  .session-timer-start{width:100%;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;}
+  .session-timer-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .session-timer-stat{display:flex;flex-direction:column;align-items:flex-start;}
+  .session-timer-label{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);}
+  .session-timer-value{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;line-height:1.1;}
+  .session-timer-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
+  .session-timer-btn{padding:8px 12px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text);}
+  .session-timer-btn.stop{border-color:var(--danger);color:var(--danger);}
+  .session-timer-btn.rest{border-color:var(--accent2);color:var(--accent2);}
+  .session-timer-btn.reset{border-color:var(--border);color:var(--muted);}
+  .session-rest-bar{margin-top:10px;padding:12px;background:var(--surface2);border:1px solid var(--accent2);border-radius:6px;display:flex;align-items:center;gap:10px;}
+  .session-rest-countdown{flex:1;font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent2);letter-spacing:1px;}
+  .exercise-time-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:2px;}
+  .history-duration{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:1px;margin-top:2px;}
+  .profile-field{margin-bottom:12px;}
+  .profile-field-row{display:flex;gap:10px;}
+  .profile-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .profile-input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:8px 10px;}
+  .profile-input:focus{outline:none;border-color:var(--accent);}
+  .profile-check-row{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);}
+  .profile-check-row input{width:16px;height:16px;cursor:pointer;}
+  .profile-section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:16px 0 10px;padding-top:12px;border-top:1px solid var(--border);}
   .vid-player.mini .vid-frame-wrap{width:100px;height:60px;border-radius:4px;overflow:hidden;flex-shrink:0;pointer-events:none;}
   .vid-player.mini iframe{width:100px;height:60px;border:0;}
   .vid-player.mini .vid-info{flex:1;min-width:0;}
@@ -788,7 +904,93 @@ const css=`
   .key-note{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:10px;line-height:1.5;}
 `;
 
-function ApiKeyModal({onSave,hasKey,onRemove,onClose}){
+function ProfileModal({profile,onSave,onClose,onReset}){
+  const [p,setP]=useState(profile||DEFAULT_PROFILE);
+  const upd=(k,v)=>setP(prev=>({...prev,[k]:v}));
+  return(
+    <div className="key-modal-overlay">
+      <div className="key-modal" style={{maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+        <div className="key-modal-title">YOUR PROFILE</div>
+        <div className="key-modal-desc" style={{marginBottom:14}}>
+          Tunes the AI's recommendations to <b>you</b>. All fields optional — leave as default for neutral programming.
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Priority muscle group (feels lagging)</label>
+          <select className="profile-input" value={p.priorityMuscle} onChange={e=>upd("priorityMuscle",e.target.value)}>
+            <option value="">— none —</option>
+            {["Chest","Back","Shoulders","Biceps","Triceps","Forearms","Legs","Core"].map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Dumbbell max available (lb)</label>
+          <input className="profile-input" type="number" inputMode="numeric" min="0" value={p.dumbbellMax} onChange={e=>upd("dumbbellMax",parseInt(e.target.value)||0)}/>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Dominant side</label>
+          <select className="profile-input" value={p.dominantSide} onChange={e=>upd("dominantSide",e.target.value)}>
+            <option value="none">no imbalance</option>
+            <option value="right">right-side dominant</option>
+            <option value="left">left-side dominant</option>
+          </select>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Grip strength</label>
+          <select className="profile-input" value={p.gripStrength} onChange={e=>upd("gripStrength",e.target.value)}>
+            <option value="weak">weak — needs grip finisher</option>
+            <option value="average">average</option>
+            <option value="strong">strong — no special grip work</option>
+          </select>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Arm length</label>
+          <select className="profile-input" value={p.armLength} onChange={e=>upd("armLength",e.target.value)}>
+            <option value="short">short</option>
+            <option value="average">average</option>
+            <option value="long">long — affects pressing mechanics</option>
+          </select>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-check-row">
+            <input type="checkbox" checked={!!p.inclinePreference} onChange={e=>upd("inclinePreference",e.target.checked)}/>
+            <span>Prefer incline bench (dumbbell presses default to incline)</span>
+          </label>
+        </div>
+
+        <div className="profile-section-label">Progression</div>
+        <div className="profile-field profile-field-row">
+          <div style={{flex:1}}>
+            <label className="profile-label">Compound +lb when all reps hit</label>
+            <input className="profile-input" type="number" inputMode="decimal" step="0.5" min="0" value={p.compoundIncrement} onChange={e=>upd("compoundIncrement",parseFloat(e.target.value)||0)}/>
+          </div>
+          <div style={{flex:1}}>
+            <label className="profile-label">Isolation +lb when all reps hit</label>
+            <input className="profile-input" type="number" inputMode="decimal" step="0.5" min="0" value={p.isolationIncrement} onChange={e=>upd("isolationIncrement",parseFloat(e.target.value)||0)}/>
+          </div>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Additional notes for the AI (optional)</label>
+          <textarea className="profile-input" rows={2} placeholder="e.g. 'nagging left shoulder — avoid overhead pressing'" value={p.notes} onChange={e=>upd("notes",e.target.value)} style={{resize:"vertical",minHeight:50,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/>
+        </div>
+
+        <button className="btn btn-accent" style={{width:"100%",padding:14,marginTop:4}} onClick={()=>onSave(p)}>SAVE PROFILE</button>
+        <div style={{display:"flex",gap:8,marginTop:8}}>
+          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
+          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Reset all profile fields to defaults?"))onReset();}}>RESET</button>
+        </div>
+        <div className="key-note" style={{marginTop:14}}>STORED LOCALLY · USED ONLY IN AI PROMPTS · NEVER SENT ELSEWHERE</div>
+      </div>
+    </div>
+  );
+}
+
+function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
   const [val,setVal]=useState("");
   return(
     <div className="key-modal-overlay">
@@ -801,11 +1003,14 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose}){
           </div>
         ):(
           <div className="key-modal-desc">
-            Paste your Anthropic API key to enable AI features. Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Stored only on this device.
+            Paste your Anthropic API key to enable AI features. Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Stored only on this device. <b>You can skip this</b> — everything except AI REC works without a key.
           </div>
         )}
         <input className="key-input" type="password" autoComplete="off" placeholder="sk-ant-..." value={val} onChange={e=>setVal(e.target.value)}/>
         <button className="btn btn-accent" style={{width:"100%",padding:14,opacity:val.trim()?1:0.5,cursor:val.trim()?"pointer":"default"}} disabled={!val.trim()} onClick={()=>val.trim()&&onSave(val.trim())}>{hasKey?"REPLACE KEY":"SAVE & START"}</button>
+        {!hasKey&&onSkip&&(
+          <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onSkip}>SKIP — USE WITHOUT AI</button>
+        )}
         {hasKey&&(
           <div style={{display:"flex",gap:8,marginTop:8}}>
             <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
@@ -950,7 +1155,7 @@ function RestTimer({seconds,activeRest}){
   );
 }
 
-function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onMoveUp,onMoveDown,canMoveUp=false,canMoveDown=false}){
+function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onMoveUp,onMoveDown,canMoveUp=false,canMoveDown=false,exerciseTiming=null}){
   const [swapOpen,setSwapOpen]=useState(false);
   const [flagged,setFlagged]=useState(()=>loadDifficultExercises().includes(exercise.name));
   const [unavailable,setUnavailable]=useState(()=>loadUnavailableExercises().includes(exercise.name));
@@ -1035,7 +1240,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
   const unavailableList=loadUnavailableExercises();
   const alternatives=(getMergedLibrary()[exercise.muscle]||[]).filter(ex=>!unavailableList.includes(ex));
   const ytUrl=exercise.youtubeUrl||"";
-  const isValidYt=ytUrl.includes("youtube.com")||ytUrl.includes("youtu.be");
+  const isValidYt=isSafeYoutubeUrl(ytUrl);
   return(
     <div className="exercise-card">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
@@ -1047,6 +1252,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
             {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"1px 5px"}}>L+R</span>}
             {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#fff",background:"#555",borderRadius:3,padding:"1px 5px"}}>NOT AT MY GYM</span>}
             {flagged&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#fff",background:"#cc4400",borderRadius:3,padding:"1px 5px"}}>NEEDS WORK</span>}
+            {exerciseTiming&&exerciseTiming.start&&<span className="exercise-time-badge">⏱ {formatDuration(Math.max(0,Math.round(((exerciseTiming.end||Date.now())-exerciseTiming.start)/1000)))}</span>}
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
@@ -1110,6 +1316,7 @@ function HistoryItem({entry,onDelete}){
           <div className="history-tags">
             {muscles.map(m=><span key={m} className="tag">{m}</span>)}
             <span className="tag">{entry.exercises.length} exercises</span>
+            {entry.durationSec>0&&<span className="tag" style={{color:"var(--accent)"}}>⏱ {formatDuration(entry.durationSec)}</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}} onClick={e=>e.stopPropagation()}>
@@ -1131,21 +1338,62 @@ function HistoryItem({entry,onDelete}){
             <div key={ex.id} className="hist-exercise">
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div className="hist-name">{ex.name}</div>
-                {ex.youtubeUrl&&(ex.youtubeUrl.includes("youtube.com")||ex.youtubeUrl.includes("youtu.be"))&&(
+                {isSafeYoutubeUrl(ex.youtubeUrl)&&(
                   <a href={ex.youtubeUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",textDecoration:"none",flexShrink:0}}>▶ VIDEO</a>
                 )}
               </div>
               <div className="hist-sets">
-                {ex.muscle==="Cardio"
-                  ?ex.sets.filter(s=>s.duration||s.resistance).map(s=>(<span key={s.id} className="hist-set-chip">{s.duration?`${s.duration}min`:"–"} &middot; res {s.resistance||"–"}</span>))
-                  :isUnilateralExercise(ex.name)
-                  ?ex.sets.filter(s=>s.weightL||s.weightR||s.repsL||s.repsR).map(s=>(<span key={s.id} className="hist-set-chip">L:{s.weightL||"–"}lb×{s.repsL||"–"} R:{s.weightR||"–"}lb×{s.repsR||"–"}</span>))
-                  :ex.sets.filter(s=>s.weight||s.reps).map(s=>(<span key={s.id} className="hist-set-chip">{s.weight?`${s.weight}lb`:"–"} × {s.reps||"–"}</span>))
-                }
-                {(ex.muscle==="Cardio"?ex.sets.filter(s=>s.duration||s.resistance).length===0
-                  :isUnilateralExercise(ex.name)?ex.sets.filter(s=>s.weightL||s.weightR).length===0
-                  :ex.sets.filter(s=>s.weight||s.reps).length===0
-                )&&<span style={{color:"var(--muted)"}}>No data logged</span>}
+                {(()=>{
+                  const sets=ex.sets||[];
+                  // Determine shape in the same priority order used by LOG/SetRow
+                  const isCardio=ex.muscle==="Cardio";
+                  const isUni=isUnilateralExercise(ex.name);
+                  const isRung=RUNG_EXERCISES.has(ex.name);
+                  const isLevel=LEVEL_EXERCISES.has(ex.name);
+                  const isTimed=TIMED_EXERCISES.has(ex.name)&&!isRung&&!isLevel;
+                  const isBW=BODYWEIGHT_EXERCISES.has(ex.name);
+                  const isAssist=ASSISTED_EXERCISES.has(ex.name);
+                  const chips=[];
+                  if(isCardio){
+                    sets.filter(s=>s.duration||s.resistance||s.calories).forEach(s=>{
+                      const parts=[];
+                      if(s.duration)parts.push(`${s.duration}min`);
+                      if(s.resistance)parts.push(`lv ${s.resistance}`);
+                      if(s.calories)parts.push(`${s.calories}cal`);
+                      chips.push(<span key={s.id} className="hist-set-chip">{parts.join(" · ")||"–"}</span>);
+                    });
+                  } else if(isUni){
+                    sets.filter(s=>s.weightL||s.weightR||s.repsL||s.repsR).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">L:{s.weightL||"–"}lb×{s.repsL||"–"} R:{s.weightR||"–"}lb×{s.repsR||"–"}</span>);
+                    });
+                  } else if(isRung){
+                    sets.filter(s=>(s.rung!==undefined&&s.rung!=="")||s.duration).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">R{s.rung||"–"} · {s.duration?`${s.duration}s`:"–"}</span>);
+                    });
+                  } else if(isLevel){
+                    sets.filter(s=>(s.level!==undefined&&s.level!=="")||s.duration||s.reps).forEach(s=>{
+                      const metric=s.duration?`${s.duration}s`:s.reps?`${s.reps} reps`:"–";
+                      chips.push(<span key={s.id} className="hist-set-chip">Lv{s.level||"–"} · {metric}</span>);
+                    });
+                  } else if(isTimed){
+                    sets.filter(s=>s.duration).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">{s.duration}s</span>);
+                    });
+                  } else if(isAssist){
+                    sets.filter(s=>s.assist!==undefined||s.reps).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">assist {s.assist||"–"}lb × {s.reps||"–"}</span>);
+                    });
+                  } else if(isBW){
+                    sets.filter(s=>s.reps).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">BW × {s.reps}</span>);
+                    });
+                  } else {
+                    sets.filter(s=>s.weight||s.reps).forEach(s=>{
+                      chips.push(<span key={s.id} className="hist-set-chip">{s.weight?`${s.weight}lb`:"–"} × {s.reps||"–"}</span>);
+                    });
+                  }
+                  return chips.length?chips:<span style={{color:"var(--muted)"}}>No data logged</span>;
+                })()}
               </div>
             </div>
           ))}
@@ -1229,7 +1477,7 @@ function OverallGains({history}){
             <div key={muscle} style={{marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                 <span style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--text)"}}>{muscle}</span>
-                <span style={{fontFamily:"Bebas Neue",fontSize:12,color:"var(--muted)",letterSpacing:1}}>{count} sets</span>
+                <span style={{fontFamily:"Bebas Neue",fontSize:12,color:"var(--muted)",letterSpacing:1}}>{count} {count===1?"session":"sessions"}</span>
               </div>
               <div style={{height:6,background:"var(--surface2)",borderRadius:3,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${Math.round((count/maxCount)*100)}%`,background:muscleColors[muscle]||"var(--accent)",borderRadius:3,transition:"width 0.4s ease"}}/>
@@ -1577,7 +1825,7 @@ class ErrorBoundary extends React.Component{
   componentDidCatch(error,info){console.error("App crashed:",error,info);}
   handleBackup(){try{exportData();}catch(e){alert("Backup failed: "+e.message);}}
   handleReload(){window.location.reload();}
-  handleClearDraft(){try{clearDraftSession();window.location.reload();}catch(e){window.location.reload();}}
+  handleClearDraft(){try{clearDraftSession();clearSessionTiming();window.location.reload();}catch(e){window.location.reload();}}
   render(){
     if(!this.state.hasError)return this.props.children;
     return(
@@ -1608,6 +1856,20 @@ function GymTracker(){
     return loadApiKey();
   });
   const [showKeyModal,setShowKeyModal]=useState(false);
+  const [keySkipped,setKeySkipped]=useState(()=>loadKeySkipped());
+  const [profile,setProfile]=useState(()=>loadProfile());
+  const [showProfileModal,setShowProfileModal]=useState(false);
+  const handleSaveProfile=(p)=>{saveProfile(p);setProfile(p);setShowProfileModal(false);};
+  const handleResetProfile=()=>{saveProfile(DEFAULT_PROFILE);setProfile(DEFAULT_PROFILE);setShowProfileModal(false);};
+  // Session timing (LVL1/LVL2 only — hidden in LVL3)
+  const [sessionTiming,setSessionTiming]=useState(()=>loadSessionTiming());
+  const [restTimer,setRestTimer]=useState(null); // {endTime:number, duration:number}
+  const [clockTick,setClockTick]=useState(0); // forces re-render for live countdowns
+  const startSession=()=>{const t={startTime:Date.now(),endTime:null,exerciseTimes:{}};setSessionTiming(t);saveSessionTiming(t);};
+  const stopSession=()=>{if(!sessionTiming||!sessionTiming.startTime)return;const t={...sessionTiming,endTime:Date.now()};setSessionTiming(t);saveSessionTiming(t);};
+  const resetSession=()=>{setSessionTiming(null);clearSessionTiming();setRestTimer(null);};
+  const startRestTimer=()=>{const dur=intensityLevel===2?40:60;setRestTimer({endTime:Date.now()+dur*1000,duration:dur});};
+  const cancelRestTimer=()=>{setRestTimer(null);};
   const [showCardioModal,setShowCardioModal]=useState(false);
   const [cardioEquipment,setCardioEquipment]=useState(()=>loadCardioEquipment());
   const [intensityLevel,setIntensityLevel]=useState(()=>loadIntensityLevel());
@@ -1630,6 +1892,32 @@ function GymTracker(){
   const [exercises,setExercises]=useState(_draft?.exercises||[]);
   const [loadedFromAI,setLoadedFromAI]=useState(_draft?.loadedFromAI||false);
   const [manualAdd,setManualAdd]=useState(false);
+  // Clock tick — runs 1Hz while session or rest timer is active
+  useEffect(()=>{
+    const sessionRunning=sessionTiming&&sessionTiming.startTime&&!sessionTiming.endTime;
+    if(!sessionRunning&&!restTimer)return;
+    const id=setInterval(()=>setClockTick(t=>t+1),1000);
+    return ()=>clearInterval(id);
+  },[sessionTiming,restTimer]);
+  // Rest timer beep when it hits zero
+  useEffect(()=>{
+    if(!restTimer)return;
+    const remaining=Math.ceil((restTimer.endTime-Date.now())/1000);
+    if(remaining<=0){beep();if(navigator.vibrate)navigator.vibrate([120,60,120]);setRestTimer(null);}
+  },[clockTick,restTimer]);
+  // Per-exercise timing — stamps start on first-data entry, bumps end on each change
+  useEffect(()=>{
+    if(!sessionTiming||!sessionTiming.startTime||sessionTiming.endTime)return;
+    const now=Date.now();const next={...sessionTiming,exerciseTimes:{...sessionTiming.exerciseTimes}};let changed=false;
+    exercises.forEach(ex=>{
+      const hasData=(ex.sets||[]).some(s=>s.weight||s.reps||s.weightL||s.weightR||s.repsL||s.repsR||s.duration||s.assist||(s.rung!==undefined&&s.rung!=="")||(s.level!==undefined&&s.level!==""));
+      if(!hasData)return;
+      const cur=next.exerciseTimes[ex.id];
+      if(!cur){next.exerciseTimes[ex.id]={start:now,end:now};changed=true;}
+      else if(cur.end!==now){next.exerciseTimes[ex.id]={...cur,end:now};changed=true;}
+    });
+    if(changed){setSessionTiming(next);saveSessionTiming(next);}
+  },[exercises]);
   const _seeded=seedCuratedVideosOnce();
   const [videos,setVideos]=useState(_seeded||loadVideos());
   const [videoLogs,setVideoLogs]=useState(loadVideoLogs());
@@ -1754,9 +2042,10 @@ function GymTracker(){
   const [scanLoading,setScanLoading]=useState(false);
   const [scanResult,setScanResult]=useState(null);
 
-  const handleSaveKey=(k)=>{saveApiKey(k);setApiKey(k);setShowKeyModal(false);};
+  const handleSaveKey=(k)=>{saveApiKey(k);setApiKey(k);setShowKeyModal(false);saveKeySkipped(false);setKeySkipped(false);};
   const handleRemoveKey=()=>{saveApiKey("");setApiKey("");setShowKeyModal(false);};
   const handleCloseKeyModal=()=>{setShowKeyModal(false);};
+  const handleSkipKey=()=>{saveKeySkipped(true);setKeySkipped(true);setShowKeyModal(false);};
   const apiHeaders=()=>({"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
   const addExercise=()=>{
@@ -1791,11 +2080,18 @@ function GymTracker(){
   const saveWorkout=()=>{
     if(!exercises.length)return;
     const workoutFocus=activeFocus;
-    const entry={id:generateId(),date:today(),dateKey:todayKey(),focus:workoutFocus,exercises,note,savedAt:Date.now()};
+    // Capture timing: use endTime if stopped, else now; use startTime if present. Only include if we have a start.
+    let durationSec=null,exerciseTimings=null;
+    if(sessionTiming&&sessionTiming.startTime){
+      const end=sessionTiming.endTime||Date.now();
+      durationSec=Math.max(0,Math.round((end-sessionTiming.startTime)/1000));
+      exerciseTimings=sessionTiming.exerciseTimes||{};
+    }
+    const entry={id:generateId(),date:today(),dateKey:todayKey(),focus:workoutFocus,exercises,note,savedAt:Date.now(),durationSec,exerciseTimings};
     const updated=[entry,...history];
     setHistory(updated);saveHistory(updated);
     if(navigator.vibrate)navigator.vibrate([40,30,40]);
-    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setManualAdd(false);setFocusOverride(null);clearDraftSession();setTab("history");
+    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setManualAdd(false);setFocusOverride(null);clearDraftSession();resetSession();setTab("history");
   };
 
   const MOVEMENT_KEYWORDS=["press","row","curl","raise","fly","flye","extension","pulldown","pushdown","squat","lunge","deadlift","shrug","crunch","plank","dip","pullup","pull-up","push-up","pushup","kickback","pullover","rotation","twist","carry","hold","hang","bridge","thrust","step","jump","sprint","climb","swing","cable","machine","dumbbell","barbell","smith","incline","decline","seated","standing","single","unilateral","lateral","front","rear","reverse","close","wide","neutral","hammer","concentration","preacher","drag","zottman","overhead","underhand","overhand","Romanian","Bulgarian","Nordic","Copenhagen","Jefferson","hack","sumo","conventional","stiff","straight","lying","prone","supine","bent","arm","leg","chest","back","shoulder","bicep","tricep","glute","quad","hamstring","calf","ab","core","wrist","grip"];
@@ -2008,7 +2304,7 @@ function GymTracker(){
       // weight-based (bilateral / unilateral / assisted)
       const trend=recent.map(s=>`${s.date}: ${s.totalSets}x${s.avgReps} @ ${s.maxWeight}lb`).join(" -> ");
       const isCompound=["press","row","squat","deadlift","lunge","pull","dip","chin"].some(k=>name.toLowerCase().includes(k));
-      const increment=isCompound?5:2.5;
+      const increment=isCompound?(profile.compoundIncrement||5):(profile.isolationIncrement||2.5);
       const suggested=latest.completedAllReps?latest.maxWeight+increment:latest.maxWeight;
       const progressNote=latest.completedAllReps?"INCREASE — completed all reps":"HOLD — did not complete all reps";
       return `${name} [MINIMUM WEIGHT: ${latest.maxWeight}lb — do NOT go below this]: ${trend} → ACTION: ${progressNote}, USE: ${suggested}lb`;
@@ -2023,23 +2319,7 @@ function GymTracker(){
       return `${w.date}: ${muscles} - ${exNames}`;
     }).join("\n");
 
-    const userContext=`IMPORTANT USER CONTEXT:
-- Planet Fitness with TWO barbell areas, Smith machines, dumbbells up to 75lb, full cable stations, all standard machines.
-- User has RIGHT SIDE DOMINANCE causing left-side strength imbalance.
-- PRIORITIZE unilateral exercises for Back and Chest: Single-Arm Dumbbell Row, Single-Arm Cable Row, Single-Arm Cable Fly, Single-Arm Dumbbell Press.
-- PREFER single-arm variations for shoulder isolation exercises (e.g. Single-Arm Front Raise over Front Raises, Single-Arm Lateral Raise over Lateral Raises). Bilateral shoulder compound movements like Overhead Press are fine — this preference applies to isolation movements only.
-- For bilateral exercises tip should say: start with LEFT side first, match on right.
-- Dumbbells max 75lb. Regularly include left-side isolation to build balance.
-- For any dumbbell press variation, always specify the bench angle in the tip (e.g. "set bench to 30-45 degree incline" or "use flat bench"). User prefers incline — default to incline unless flat is specifically more appropriate.
-- For Single-Arm Dumbbell Press, always specify incline in the tip.
-- User has LONG ARMS. This affects exercise mechanics significantly:
-  * Bench press: longer range of motion, more shoulder stress — cue to keep elbows at 45-75 degrees, not flared
-  * Rows: longer arms = greater stretch at bottom, take advantage of full ROM
-  * Overhead press: longer levers = harder lockout — cue to avoid hyperextending at top
-  * Curls: long arms = great peak contraction advantage — use full ROM
-  * Dips/Pushdowns: watch elbow stress at full extension, don't lock out aggressively
-- User has CHRONIC WEAK GRIP and is actively building forearm/grip strength. Long arms contribute to grip fatigue on pulling movements.
-- ALWAYS include at least one forearm or grip exercise in the FINISHER (e.g. Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, Zottman Curl). Place grip work at END of session only — never in supersets where it would fatigue grip for main lifts.`;
+    const userContext=buildUserContextFromProfile(profile);
 
     const difficultExercises=loadDifficultExercises();
     const intensity=intensityLevel;
@@ -2072,9 +2352,8 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
 - MUST include at least 1 core exercise
 - MUST include at least 1 forearm/grip exercise — place in the finisher only, never in supersets
 - Chest is a PRIORITY — user feels chest is falling behind. Always include at least 1 chest exercise regardless of focus day
-- WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with last logged weight and completion status. You MUST use these weights as your baseline. NEVER suggest a weight lower than the last logged weight — this is a hard rule with no exceptions. If all reps were completed: suggest last weight +5lb for compounds, +2.5lb for isolation. If reps were not completed: suggest the exact same weight as last time. If no history exists: make a reasonable starting estimate based on the exercise type.
-- Dumbbells max 75lb. For unilateral exercises left and right are logged separately
-- Rep ranges by exercise type: compound movements (press, row, squat, deadlift) = 6-10 reps; isolation movements (flyes, raises, curls, kickbacks, extensions, crossovers) = 10-15 reps. ALWAYS include a specific weight suggestion — never leave weight blank
+- WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with last logged weight and completion status. You MUST use these weights as your baseline. NEVER suggest a weight lower than the last logged weight — this is a hard rule with no exceptions. If all reps were completed: suggest last weight +${profile.compoundIncrement||5}lb for compounds, +${profile.isolationIncrement||2.5}lb for isolation. If reps were not completed: suggest the exact same weight as last time. If no history exists: make a reasonable starting estimate based on the exercise type.
+- For unilateral exercises left and right are logged separately. Respect the user's dumbbell max from the USER CONTEXT above.
 - BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Bench Dips, Plank, all TRX exercises like TRX Row / TRX Chest Press / TRX Bicep Curl, etc.) must have weight set to "bodyweight" — never assign a number weight to these
 - SPECIAL EQUIPMENT TYPES with no weight field:
   * TIMED exercises (Plank, Wall Sit, Dead Hang, TRX Plank, all Stretching entries): log seconds only, set reps to duration in seconds and weight to "bodyweight"
@@ -2083,13 +2362,13 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
 - STRETCHING group: only use stretches as an optional cool-down block AFTER the main workout, never as a superset partner during strength work
 - COMBO exercises (dumbbell complexes like "Squat to Press", "Man Maker", "Curl to Press"): these chain 2–4 movements with one dumbbell weight. Use as conditioning finishers or standalone sessions, not as superset partners for isolation work. Weight = the limiting movement's max
 - For any barbell press movement (bench press, incline bench press, overhead press, etc.) ALWAYS recommend the Smith Machine version — user's gym has Smith machines but NO free barbells. Never suggest barbell exercises.
-- REP RANGES: compound movements (press, row, squat, deadlift) 6-12 reps. Isolation movements (flyes, lateral raise, curl, extension, fly) 10-15 reps. Never recommend fewer than 8 reps for any isolation exercise
+- REP RANGES: compound movements (press, row, squat, deadlift, lunge, pull) target 6-10 reps. Isolation movements (flyes, lateral raise, curl, extension, pushdown, crossover) target 10-15 reps. Never recommend fewer than 8 reps for isolation.
 - WEIGHT: always provide a specific weight value for every non-bodyweight exercise — never leave weight blank or omit it
 - VARIETY IS CRITICAL: DO NOT use any exercise from the last session. Last session exercises (forbidden): ${lastSessionExercises.length>0?lastSessionExercises.join(", "):"none"}.
 ${avoidList.length>0?`- REFRESH REQUEST: User has refreshed ${Math.ceil(avoidList.length/10)} time(s) and rejected these exercises — DO NOT use ANY of them: ${avoidList.join(", ")}. Choose completely different exercises.`:""}
 - AVOID exercises from the last 3 sessions unless no alternatives exist: ${recentThreeExercises.length>0?recentThreeExercises.join(", "):"none"}.
 - EXERCISE USAGE HISTORY (deprioritize high-count exercises, actively choose lower-count or unused exercises): ${usageSummary||"none yet"}.
-- The exercise library has 170+ options. You must explore the full list — do not default to the same 20 popular exercises. Choose movements the user has NOT done or has done least.
+- The exercise library has 240+ options. You must explore the full list — do not default to the same 20 popular exercises. Choose movements the user has NOT done or has done least.
 - NEVER-DONE EXERCISES (PRIORITIZE THESE — pick from this list before repeating anything):\n${neverDone||"All exercises have been tried — use lowest usage count ones."}
 - UNAVAILABLE exercises (user's gym does not have this equipment — NEVER suggest these): ${unavailableExercises.length>0?unavailableExercises.join(", "):"none"}.
 - NEEDS WORK exercises (user flagged these as difficult — PRIORITIZE including at least 1-2 per session to build proficiency): ${difficultExercises.length>0?difficultExercises.join(", "):"none flagged yet"}.
@@ -2159,7 +2438,8 @@ Respond ONLY with valid JSON in this exact format (no other text):
   return(
     <>
       <style>{css}</style>
-      {(!apiKey||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal}/>}
+      {((!apiKey&&!keySkipped)||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal} onSkip={handleSkipKey}/>}
+      {showProfileModal&&<ProfileModal profile={profile} onSave={handleSaveProfile} onClose={()=>setShowProfileModal(false)} onReset={handleResetProfile}/>}
       {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)}/>}
       {showDataModal&&<DataModal onClose={()=>setShowDataModal(false)} onImportDone={()=>{setHistory(loadHistory());setShowDataModal(false);}}/>}
       {showPlaylistModal&&<PlaylistModal playlists={playlists} activePlaylist={activePlaylist} onSave={(list,active)=>{setPlaylists(list);setActivePlaylist(active);savePlaylists(list);saveActivePlaylist(active);}} onClose={()=>setShowPlaylistModal(false)}/>}
@@ -2174,6 +2454,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
               <button className="header-key" style={{marginLeft:0,opacity:playlists.length>0?1:0.35}} title="Playlists" onClick={()=>setShowPlaylistModal(true)}>🎵</button>
               <button className="header-key" style={{marginLeft:0}} title="Backup & Restore" onClick={()=>setShowDataModal(true)}>💾</button>
               <button className="header-key" style={{marginLeft:0}} title="Cardio Equipment" onClick={()=>setShowCardioModal(true)}>🏃</button>
+              <button className="header-key" style={{marginLeft:0}} title="Your Profile (AI tuning)" onClick={()=>setShowProfileModal(true)}>👤</button>
               <button className="header-key" style={{marginLeft:0}} title="Update API Key" onClick={()=>setShowKeyModal(true)}>⚙</button>
             </div>
           </div>
@@ -2195,6 +2476,57 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
         {tab==="log"&&(
           <div className="section">
+            {intensityLevel!==3&&(()=>{
+              const running=sessionTiming&&sessionTiming.startTime&&!sessionTiming.endTime;
+              const stopped=sessionTiming&&sessionTiming.endTime;
+              const now=Date.now();
+              const elapsed=running?Math.floor((now-sessionTiming.startTime)/1000):(stopped?Math.floor((sessionTiming.endTime-sessionTiming.startTime)/1000):0);
+              // Estimated total: sum of (sets × (45s work + rest)) + 2min buffer
+              const restSec=intensityLevel===2?40:60;
+              const totalSets=exercises.reduce((s,e)=>s+(e.sets?e.sets.length:0),0);
+              const est=totalSets>0?totalSets*(45+restSec)+120:null;
+              const restRemaining=restTimer?Math.max(0,Math.ceil((restTimer.endTime-now)/1000)):0;
+              return(
+                <div className="session-timer">
+                  {!sessionTiming&&(
+                    <button className="btn btn-accent session-timer-start" onClick={startSession}>▶ START SESSION TIMER</button>
+                  )}
+                  {sessionTiming&&(
+                    <>
+                      <div className="session-timer-row">
+                        <div className="session-timer-stat">
+                          <div className="session-timer-label">{running?"ELAPSED":"TOTAL"}</div>
+                          <div className="session-timer-value" style={{color:running?"var(--accent)":"var(--muted)"}}>{formatDuration(elapsed)}</div>
+                        </div>
+                        {est!==null&&(
+                          <div className="session-timer-stat">
+                            <div className="session-timer-label">EST</div>
+                            <div className="session-timer-value" style={{color:"var(--muted)"}}>{formatDuration(est)}</div>
+                          </div>
+                        )}
+                        <div className="session-timer-actions">
+                          {running&&!restTimer&&(
+                            <button className="session-timer-btn rest" onClick={startRestTimer}>REST {restSec}s</button>
+                          )}
+                          {running&&(
+                            <button className="session-timer-btn stop" onClick={stopSession}>■ STOP</button>
+                          )}
+                          {stopped&&(
+                            <button className="session-timer-btn reset" onClick={resetSession}>RESET</button>
+                          )}
+                        </div>
+                      </div>
+                      {restTimer&&(
+                        <div className="session-rest-bar">
+                          <div className="session-rest-countdown">⏳ REST: {restRemaining}s</div>
+                          <button className="session-timer-btn" onClick={cancelRestTimer}>SKIP</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {_draft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
             {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
             {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add an exercise to this plan</button>}
@@ -2260,7 +2592,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
                           {ex.supersetLabel==="A"?"A — DO FIRST":"B — DO SECOND"}
                         </div>
                       )}
-                      <ExerciseCard exercise={ex} history={history} onChange={u=>updateExercise(ex.id,u)} onRemove={()=>removeExercise(ex.id)} allowSwap={loadedFromAI} onMoveUp={()=>moveExercise(ex.id,"up")} onMoveDown={()=>moveExercise(ex.id,"down")} canMoveUp={i>0} canMoveDown={i<exercises.length-1}/>
+                      <ExerciseCard exercise={ex} history={history} onChange={u=>updateExercise(ex.id,u)} onRemove={()=>removeExercise(ex.id)} allowSwap={loadedFromAI} onMoveUp={()=>moveExercise(ex.id,"up")} onMoveDown={()=>moveExercise(ex.id,"down")} canMoveUp={i>0} canMoveDown={i<exercises.length-1} exerciseTiming={intensityLevel!==3&&sessionTiming&&sessionTiming.exerciseTimes?sessionTiming.exerciseTimes[ex.id]:null}/>
                       {ex.supersetLabel==="B"&&ex.restSeconds&&<RestTimer seconds={ex.restSeconds} activeRest={ex.activeRest||null}/>}
                     </div>
                   );
@@ -2549,13 +2881,14 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p"><b>1.</b> Set your bodyweight via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
             <div className="help-p"><b>2.</b> Add your API key via the <b>⚙</b> icon (or you'll be prompted). Get one at console.anthropic.com. It stays on your device, never displayed.</div>
             <div className="help-p"><b>3.</b> Tap <b>AI REC</b> in the nav, pick a focus (Push / Pull / Legs / Full Body), and hit generate. A workout plan will appear in about 20 seconds.</div>
-            <div className="help-p"><b>4.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE SESSION</b> when finished.</div>
+            <div className="help-p"><b>4.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE WORKOUT</b> when finished.</div>
             <div className="help-p"><b>5.</b> Over time, check <b>GAINS</b> to see individual exercises trending up, and <b>HISTORY</b> for past sessions.</div>
             <div className="help-p">If AI isn't your thing, skip step 3 and go straight to LOG — add exercises manually and log as you go. Everything works without a key except AI REC.</div>
 
             <div className="section-label">A Few Things Worth Knowing</div>
             <div className="help-p">Your data lives in your browser on the device you're using, so it's a good idea to back up regularly via the <b>💾</b> Export button in the header.</div>
             <div className="help-p">The AI features use your own Anthropic API key (typically a few cents per generated plan). Everything else is free.</div>
+            <div className="help-p">Tap <b>👤</b> in the header to tune the AI to <b>you</b> — priority muscle, dominant side, grip strength, dumbbell max, preferred progression increments, and freeform notes. All fields optional; defaults are neutral.</div>
             <div className="help-p">Videos play inline where the YouTube creator has enabled embedding — most do, occasionally one won't.</div>
 
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>Built as a personal project · Feedback welcome · Polish is ongoing</div>
@@ -2570,11 +2903,11 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p">Tap <b>LOG</b> to record a session from scratch, or <b>AI REC</b> to have Claude build one for you based on what you've done recently. Everything you log is saved on your device automatically — no account, no cloud, no sign-in.</div>
             <div className="help-p">First time? Open <b>Settings</b> (⚙️ top right), paste an Anthropic API key if you want AI plans, and enter your bodyweight so assisted machines can calculate your real load.</div>
 
-            <div className="section-label">The Five Tabs</div>
-            <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE SESSION</b> when you're done.</div>
-            <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data here (<b>EXPORT</b> button) — details below.</div>
+            <div className="section-label">The Main Tabs</div>
+            <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE WORKOUT</b> when you're done.</div>
+            <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data via the <b>💾</b> button in the header — details below.</div>
             <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations. Elevate Core shows level progression.</div>
-            <div className="help-p"><b>AI REC</b> — Claude builds a superset-based Planet Fitness workout. Pick your focus (Push/Pull/Legs or let it rotate). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
+            <div className="help-p"><b>AI REC</b> — Claude builds a superset-based Planet Fitness workout. Pick your focus (Auto / Push / Pull / Legs). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
             <div className="help-p"><b>HELP</b> — you're here.</div>
 
             <div className="section-label">The AI Plans</div>
@@ -2589,7 +2922,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
 
             <div className="section-label">Combos</div>
-            <div className="help-p">A combo is a chain of movements done back-to-back with one dumbbell — e.g. Squat to Press, Man Maker. Log one weight (whatever the limiting movement allows) and one rep count (how many rounds through the full sequence). 21 combos are built in; pick from the <b>Combo</b> group in the exercise picker.</div>
+            <div className="help-p">A combo is a chain of movements done back-to-back with one dumbbell — e.g. Squat to Press, Man Maker. Log one weight (whatever the limiting movement allows) and one rep count (how many rounds through the full sequence). The <b>Combo</b> group in the exercise picker has 30+ built in.</div>
 
             <div className="section-label">Tips You'll Miss On Your First Session</div>
             <div className="help-p"><b>The 🚫 icon</b> marks a machine as unavailable at your gym — the AI stops suggesting it.</div>
@@ -2600,7 +2933,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">Your Data</div>
             <div className="help-p">Everything lives in your phone's browser storage. No account exists. If you clear the site's data or uninstall, your history goes with it.</div>
-            <div className="help-p"><b>Back up regularly</b> from the HISTORY tab — <b>EXPORT</b> downloads a JSON file. Save it somewhere safe (email it to yourself, drop it in Google Drive). <b>IMPORT</b> restores it later, on any device.</div>
+            <div className="help-p"><b>Back up regularly</b> via the <b>💾</b> button in the header — <b>EXPORT</b> downloads a JSON file. Save it somewhere safe (email it to yourself, drop it in Google Drive). <b>IMPORT</b> restores it later, on any device.</div>
             <div className="help-p">The only data that ever leaves your device is what you send to Anthropic when generating an AI plan (your recent history summary). Anthropic's privacy terms apply to that.</div>
 
             <div className="section-label">Troubleshooting</div>
@@ -2611,9 +2944,9 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="section-label">FAQ</div>
             <div className="help-p"><b>Do I need an API key?</b> Only for AI plans. Everything else — logging, history, GAINS — works with no key.</div>
             <div className="help-p"><b>Can I use this at a non-PF gym?</b> Yes. The AI is tuned for PF's equipment, but manual logging works for any lift.</div>
-            <div className="help-p"><b>Can I add my own exercises?</b> Yes — type a name in the exercise dropdown; the app saves it to your custom library.</div>
+            <div className="help-p"><b>Can I add my own exercises?</b> Not directly in the picker today. New exercises get added to your library when the AI names one that isn't built in — you can also add them to a video's exercise list in PLAY, which feeds the LVL3 pool.</div>
             <div className="help-p"><b>Does the AI know if I flag or ban exercises?</b> Yes. Flags increase frequency; bans remove them entirely.</div>
-            <div className="help-p"><b>Can I use this offline?</b> Once loaded, LOG and HISTORY work offline. AI generation requires internet.</div>
+            <div className="help-p"><b>Can I use this offline?</b> Partly. While the browser tab stays open, LOG and HISTORY continue to work with no network. A cold reload needs internet (the app isn't cached offline). AI generation always needs internet.</div>
             <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
 
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
