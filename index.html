@@ -695,12 +695,12 @@ const css=`
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;overscroll-behavior:none;}
   .app{min-height:100vh;max-width:480px;margin:0 auto;background:var(--bg);padding-bottom:90px;}
-  .header{padding:24px 20px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10;}
-  .header-top{display:flex;align-items:baseline;gap:10px;margin-bottom:4px;}
+  .header{padding:24px 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10;}
+  .header-top{display:flex;align-items:center;gap:5px;margin-bottom:4px;flex-wrap:wrap;}
   .logo{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--accent);line-height:1;}
   .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
-  .header-key{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0;margin-left:auto;}
+  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:2px 1px;margin-left:0;line-height:1;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
   .nav-btn{flex:1;padding:11px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
@@ -2877,13 +2877,17 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="section-label">Modes</div>
             <div className="help-p">The <b>LVL</b> button in the top header switches between three modes: <b>LVL1</b> (standard AI-driven workouts), <b>LVL2</b> (high-intensity AI-driven workouts), and <b>LVL3</b> (circuit workouts built from your video library, no AI). The nav updates to show what's relevant to the current mode.</div>
 
+            <div className="section-label">★ Set Up Your Profile First</div>
+            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}>Tap the <b>👤</b> icon in the header to tell the AI about <b>you</b>: priority muscle group, dominant side, grip strength, arm length, dumbbell max, progression preferences, and freeform notes. All fields are optional, defaults are neutral — but the AI's plans get much better once you fill this in. <b>Do this before generating your first AI workout.</b></div>
+
             <div className="section-label">Getting Started (LVL1)</div>
-            <div className="help-p"><b>1.</b> Set your bodyweight via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
-            <div className="help-p"><b>2.</b> Add your API key via the <b>⚙</b> icon (or you'll be prompted). Get one at console.anthropic.com. It stays on your device, never displayed.</div>
-            <div className="help-p"><b>3.</b> Tap <b>AI REC</b> in the nav, pick a focus (Push / Pull / Legs / Full Body), and hit generate. A workout plan will appear in about 20 seconds.</div>
-            <div className="help-p"><b>4.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE WORKOUT</b> when finished.</div>
-            <div className="help-p"><b>5.</b> Over time, check <b>GAINS</b> to see individual exercises trending up, and <b>HISTORY</b> for past sessions.</div>
-            <div className="help-p">If AI isn't your thing, skip step 3 and go straight to LOG — add exercises manually and log as you go. Everything works without a key except AI REC.</div>
+            <div className="help-p"><b>1.</b> Tap <b>👤</b> and set up your profile (above). Takes under a minute.</div>
+            <div className="help-p"><b>2.</b> Set your bodyweight via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
+            <div className="help-p"><b>3.</b> Add your API key via the <b>⚙</b> icon (or you'll be prompted). Get one at console.anthropic.com. It stays on your device, never displayed.</div>
+            <div className="help-p"><b>4.</b> Tap <b>AI REC</b> in the nav, pick a focus (Auto / Push / Pull / Legs), and hit generate. A workout plan will appear in about 20 seconds.</div>
+            <div className="help-p"><b>5.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE WORKOUT</b> when finished.</div>
+            <div className="help-p"><b>6.</b> Over time, check <b>GAINS</b> to see individual exercises trending up, and <b>HISTORY</b> for past sessions.</div>
+            <div className="help-p">If AI isn't your thing, skip steps 3-4 and go straight to LOG — add exercises manually and log as you go. Everything works without a key except AI REC.</div>
 
             <div className="section-label">A Few Things Worth Knowing</div>
             <div className="help-p">Your data lives in your browser on the device you're using, so it's a good idea to back up regularly via the <b>💾</b> Export button in the header.</div>
@@ -2901,7 +2905,8 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">Getting Started</div>
             <div className="help-p">Tap <b>LOG</b> to record a session from scratch, or <b>AI REC</b> to have Claude build one for you based on what you've done recently. Everything you log is saved on your device automatically — no account, no cloud, no sign-in.</div>
-            <div className="help-p">First time? Open <b>Settings</b> (⚙️ top right), paste an Anthropic API key if you want AI plans, and enter your bodyweight so assisted machines can calculate your real load.</div>
+            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}><b>★ First time? Tap the 👤 icon</b> in the header and fill in your profile — priority muscle, dominant side, grip strength, arm length, dumbbell max. The AI uses this to tune its recommendations. Takes under a minute, and plans get noticeably better.</div>
+            <div className="help-p">Also handy on first run: open <b>⚙</b> to paste an Anthropic API key (if you want AI plans — otherwise tap SKIP), and <b>BW</b> to enter your bodyweight (so assisted machines can calculate your real load).</div>
 
             <div className="section-label">The Main Tabs</div>
             <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE WORKOUT</b> when you're done.</div>
