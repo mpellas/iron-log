@@ -104,6 +104,7 @@ function importData(file,onDone){
 }
 // User profile — personal AI context + progression preferences. Replaces hardcoded "Mike" values.
 const DEFAULT_PROFILE={
+  gymType:"commercial",     // "planet-fitness" | "commercial" | "home" | "hotel-basic"
   priorityMuscle:"",
   dumbbellMax:75,
   dominantSide:"none",      // "none" | "right" | "left"
@@ -115,14 +116,32 @@ const DEFAULT_PROFILE={
   notes:""                  // freeform additional context for the AI
 };
 function loadProfile(){
-  try{const stored=JSON.parse(localStorage.getItem("ironlog:profile")||"null");return stored?{...DEFAULT_PROFILE,...stored}:DEFAULT_PROFILE;}catch{return DEFAULT_PROFILE;}
+  try{
+    const stored=JSON.parse(localStorage.getItem("ironlog:profile")||"null");
+    if(!stored)return DEFAULT_PROFILE;
+    // Back-compat: profiles saved before gymType existed assumed Planet Fitness. Preserve that for upgrade users.
+    const merged={...DEFAULT_PROFILE,...stored};
+    if(!stored.gymType)merged.gymType="planet-fitness";
+    return merged;
+  }catch{return DEFAULT_PROFILE;}
 }
 function saveProfile(p){try{localStorage.setItem("ironlog:profile",JSON.stringify(p));}catch(e){}}
 // Build the USER CONTEXT paragraph in the AI prompt from the profile. Only emits lines for non-default values,
 // so a neutral profile produces no quirks and the AI programs generically.
 function buildUserContextFromProfile(p){
   const lines=["IMPORTANT USER CONTEXT:"];
-  lines.push(`- Planet Fitness: Smith machines, dumbbells up to ${p.dumbbellMax||75}lb, full cable stations, standard machines. NO free barbells.`);
+  // Gym equipment line — varies by gym type. Mike's PF context is one option among several.
+  const gym=p.gymType||"commercial";
+  const dbMax=p.dumbbellMax||75;
+  if(gym==="planet-fitness"){
+    lines.push(`- GYM: Planet Fitness — Smith machines, dumbbells up to ${dbMax}lb, full cable stations, standard machines. NO FREE BARBELLS. For any barbell press movement (bench, incline, overhead) ALWAYS substitute the Smith Machine version. Never suggest free-barbell exercises.`);
+  } else if(gym==="home"){
+    lines.push(`- GYM: Home gym — assume dumbbells up to ${dbMax}lb and bodyweight exercises. Do NOT suggest machines, cables, or Smith machines unless the user's notes say they have them. Favor dumbbell and bodyweight compounds, bands if mentioned in notes.`);
+  } else if(gym==="hotel-basic"){
+    lines.push(`- GYM: Hotel / basic gym — assume limited equipment: a few dumbbells (max ${dbMax}lb), maybe a bench and treadmill. Do NOT suggest cables, specialty machines, barbells, or Smith machines. Favor dumbbell and bodyweight movements the user can do with minimal equipment.`);
+  } else {
+    lines.push(`- GYM: Full commercial gym — free barbells, dumbbells up to ${dbMax}lb, Smith machines, full cable stations, standard machines all available. Suggest the exercise variant that's most appropriate for the movement; barbells are fine when they're the best fit.`);
+  }
   if(p.priorityMuscle)lines.push(`- PRIORITY MUSCLE: ${p.priorityMuscle} — user feels this group is lagging and wants emphasis. Allocate at least 1 extra set or an additional accessory for ${p.priorityMuscle} when the day's focus includes it.`);
   if(p.dominantSide==="right"){
     lines.push("- RIGHT SIDE DOMINANCE causing left-side strength imbalance.");
@@ -913,6 +932,16 @@ function ProfileModal({profile,onSave,onClose,onReset}){
         <div className="key-modal-title">YOUR PROFILE</div>
         <div className="key-modal-desc" style={{marginBottom:14}}>
           Tunes the AI's recommendations to <b>you</b>. All fields optional — leave as default for neutral programming.
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Gym type (shapes AI equipment choices)</label>
+          <select className="profile-input" value={p.gymType||"commercial"} onChange={e=>upd("gymType",e.target.value)}>
+            <option value="commercial">Full commercial gym (barbells, machines, cables, everything)</option>
+            <option value="planet-fitness">Planet Fitness (Smith machines, no free barbells)</option>
+            <option value="home">Home gym (dumbbells + bodyweight)</option>
+            <option value="hotel-basic">Hotel / basic gym (minimal equipment)</option>
+          </select>
         </div>
 
         <div className="profile-field">
@@ -2361,7 +2390,7 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
   * ELEVATE CORE LEVEL exercises (Elevate Core Dynamic Plank timed, Elevate Core Scrunch reps-based): user picks level 1–7 (HIGHER level = HARDER). Do NOT assign weight; suggest target level and duration/reps in the notes
 - STRETCHING group: only use stretches as an optional cool-down block AFTER the main workout, never as a superset partner during strength work
 - COMBO exercises (dumbbell complexes like "Squat to Press", "Man Maker", "Curl to Press"): these chain 2–4 movements with one dumbbell weight. Use as conditioning finishers or standalone sessions, not as superset partners for isolation work. Weight = the limiting movement's max
-- For any barbell press movement (bench press, incline bench press, overhead press, etc.) ALWAYS recommend the Smith Machine version — user's gym has Smith machines but NO free barbells. Never suggest barbell exercises.
+- Equipment constraints come from the USER CONTEXT (gym type) above — follow them strictly. If the user's gym has no barbells, substitute Smith Machine or dumbbell versions.
 - REP RANGES: compound movements (press, row, squat, deadlift, lunge, pull) target 6-10 reps. Isolation movements (flyes, lateral raise, curl, extension, pushdown, crossover) target 10-15 reps. Never recommend fewer than 8 reps for isolation.
 - WEIGHT: always provide a specific weight value for every non-bodyweight exercise — never leave weight blank or omit it
 - VARIETY IS CRITICAL: DO NOT use any exercise from the last session. Last session exercises (forbidden): ${lastSessionExercises.length>0?lastSessionExercises.join(", "):"none"}.
@@ -2392,15 +2421,15 @@ CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
 
 FINISHER (${intensity===2?"15":"10"}-min circuit to spike heart rate):
 - ${intensity===2?"4-5":"3-4"} exercises back-to-back with minimal rest
-- ${intensity===2?"LEVEL 2: Push hard — sprints, burpees, battle movements. Max effort throughout.":"Use cardio machines or bodyweight available at Planet Fitness."}
+- ${intensity===2?"LEVEL 2: Push hard — sprints, burpees, battle movements. Max effort throughout.":"Use cardio machines or bodyweight available at the user's gym (per USER CONTEXT above)."}
 - MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — user has weak grip and long arms, grip work goes here at end of session only
 
 Respond ONLY with valid JSON in this exact format (no other text):
 {"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"Arc Trainer 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${intensity===2?"15":"10"}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}`;
 
     const prompt=history.length===0
-      ?`User just started at Planet Fitness. Build a beginner full-body superset workout.\n${userContext}\nKNOWN exercises (prefer these, but you may suggest real exercises not on this list):\n${exerciseList}\n\n${supersetRules}`
-      :`Planet Fitness gym. Recent workouts:\n${recentSummary}\n\nEXERCISE PROGRESSION DATA:\n${progressionSummary}\n\n${userContext}\n\nKNOWN exercises (prefer these, but you may suggest any real gym exercise not on this list — it will be added automatically):\n${exerciseList}\n\n${supersetRules}`;
+      ?`New user starting out. Build a beginner full-body superset workout appropriate for their gym (see USER CONTEXT).\n${userContext}\nKNOWN exercises (prefer these, but you may suggest real exercises not on this list):\n${exerciseList}\n\n${supersetRules}`
+      :`Recent workouts:\n${recentSummary}\n\nEXERCISE PROGRESSION DATA:\n${progressionSummary}\n\n${userContext}\n\nKNOWN exercises (prefer these, but you may suggest any real gym exercise not on this list — it will be added automatically):\n${exerciseList}\n\n${supersetRules}`;
 
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:apiHeaders(),
@@ -2740,7 +2769,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
               <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--danger)",padding:"16px 0",textAlign:"center"}}>{aiError}</div>
             )}
             {!aiPlan&&!aiLoading&&!aiError&&(
-              <div className="empty-state"><span className="empty-icon">🤖</span>Claude will analyze your history and build<br/>a superset-based Planet Fitness workout plan.</div>
+              <div className="empty-state"><span className="empty-icon">🤖</span>Claude will analyze your history and build<br/>a superset-based workout plan tuned to your profile.</div>
             )}
           </div>
         )}
@@ -2861,16 +2890,16 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>ABOUT 90STRONG</div>
             <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A personal gym-tracking app, honestly built and shared.</div>
 
-            <div className="help-p">90Strong is a personal gym-tracking web app built for one lifter that uses Planet Fitness (but could be used anywhere) and shared with anyone who wants to try it. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
+            <div className="help-p">90Strong is a personal gym-tracking web app originally built for one lifter and opened up for anyone who wants to try it. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
 
-            <div className="help-p">It's built around a specific way of training: variety over rigid programs, honest tracking of what you actually lifted, and quick logging that doesn't get in the way mid-workout. Exercises and AI recommendations assume Planet Fitness equipment — no free barbells, Smith machines, the PF360 rig, TRX, the TRUE Stretch cage, and the Total Gym Elevate Core. Manual logging works for any gym.</div>
+            <div className="help-p">It's built around a specific way of training: variety over rigid programs, honest tracking of what you actually lifted, and quick logging that doesn't get in the way mid-workout. Pick your gym type in the profile (full commercial, Planet Fitness, home, or hotel/basic) and the AI tailors its recommendations to the equipment you actually have. The exercise library also includes niche gear the author uses — the PF360 rig, Elevate Core machine, TRX straps, and the TRUE Stretch cage — safe to ignore if your gym doesn't have them.</div>
 
             <div className="section-label">What's Inside</div>
             <div className="help-p"><b>HELP</b> — how to use each part</div>
             <div className="help-p"><b>LOG</b> — record your workouts one exercise at a time</div>
             <div className="help-p"><b>HISTORY</b> — every past session</div>
             <div className="help-p"><b>GAINS</b> — progression charts per exercise</div>
-            <div className="help-p"><b>AI REC</b> — If not in Level 3, an optional AI-generated Planet Fitness workouts (uses your own Anthropic API key)</div>
+            <div className="help-p"><b>AI REC</b> — If not in Level 3, an optional AI-generated workout tuned to your gym and profile (uses your own Anthropic API key)</div>
             <div className="help-p"><b>PLAY</b> — a YouTube video library for workouts you follow along with</div>
             <div className="help-p"><b>LVL3</b> — circuit mode: build sessions by combining exercises across your videos, log as you flow through</div>
 
@@ -2912,7 +2941,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE WORKOUT</b> when you're done.</div>
             <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data via the <b>💾</b> button in the header — details below.</div>
             <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations. Elevate Core shows level progression.</div>
-            <div className="help-p"><b>AI REC</b> — Claude builds a superset-based Planet Fitness workout. Pick your focus (Auto / Push / Pull / Legs). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
+            <div className="help-p"><b>AI REC</b> — Claude builds a superset-based workout tuned to your gym and profile. Pick your focus (Auto / Push / Pull / Legs). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
             <div className="help-p"><b>HELP</b> — you're here.</div>
 
             <div className="section-label">The AI Plans</div>
