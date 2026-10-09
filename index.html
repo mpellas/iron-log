@@ -2411,7 +2411,7 @@ ACTIVE REST (between each superset pair):
 - ${intensity===2?"LEVEL 2: Use restSeconds=40. HIGH INTENSITY ONLY — use only the equipment listed below. Jumping Jacks and High Knees always available bodyweight options. No moderate pace.":"LEVEL 1: Use restSeconds=60. Moderate pace — use only equipment listed below."}
 - ONLY use equipment from this list (what the user's gym actually has): ${cardioEquipment.join(", ")}. Do NOT suggest any cardio equipment or exercises not on this list.
 - Vary the active rest exercise across pairs — never repeat the same one twice
-- activeRest field: short instruction e.g. "${intensity===2?"Treadmill sprint 40 sec max effort":"Arc Trainer moderate pace 60 sec"}"
+- activeRest field: short instruction e.g. "${intensity===2?"Treadmill sprint 40 sec max effort":"cardio machine moderate pace 60 sec"}"
 ${intensity===2?`
 CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
 - Exactly ONE of the 5 superset pairs must be a conditioning pair where BOTH A and B are high-intensity bodyweight movements
@@ -2425,7 +2425,7 @@ FINISHER (${intensity===2?"15":"10"}-min circuit to spike heart rate):
 - MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — user has weak grip and long arms, grip work goes here at end of session only
 
 Respond ONLY with valid JSON in this exact format (no other text):
-{"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"Arc Trainer 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${intensity===2?"15":"10"}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}`;
+{"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"cardio machine 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${intensity===2?"15":"10"}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}`;
 
     const prompt=history.length===0
       ?`New user starting out. Build a beginner full-body superset workout appropriate for their gym (see USER CONTEXT).\n${userContext}\nKNOWN exercises (prefer these, but you may suggest real exercises not on this list):\n${exerciseList}\n\n${supersetRules}`
@@ -2945,7 +2945,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p"><b>HELP</b> — you're here.</div>
 
             <div className="section-label">The AI Plans</div>
-            <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and Planet Fitness's equipment. It won't suggest barbells (PF doesn't have them) or drop your weight below what you already lifted.</div>
+            <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and the gym type you picked in your profile. It won't drop your weight below what you already lifted. If you set your gym to Planet Fitness it substitutes Smith Machines for barbells; home-gym users get dumbbell + bodyweight programming; commercial-gym users get barbell exercises when they fit.</div>
             <div className="help-p">You supply the API key — the app talks directly to Anthropic. A typical plan generation costs pennies. Your key is stored locally and never sent anywhere except Anthropic.</div>
             <div className="help-p">Once loaded, you can <b>SWAP</b> any exercise (machine taken?), <b>▲▼</b> reorder them, or add more manually with the button at the top of the plan.</div>
 
@@ -2977,7 +2977,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">FAQ</div>
             <div className="help-p"><b>Do I need an API key?</b> Only for AI plans. Everything else — logging, history, GAINS — works with no key.</div>
-            <div className="help-p"><b>Can I use this at a non-PF gym?</b> Yes. The AI is tuned for PF's equipment, but manual logging works for any lift.</div>
+            <div className="help-p"><b>Can I use this at any gym?</b> Yes. Set your gym type in the <b>👤</b> profile (full commercial, Planet Fitness, home gym, or hotel/basic) and the AI tunes its recommendations to the equipment you actually have. Manual logging works for any lift regardless.</div>
             <div className="help-p"><b>Can I add my own exercises?</b> Not directly in the picker today. New exercises get added to your library when the AI names one that isn't built in — you can also add them to a video's exercise list in PLAY, which feeds the LVL3 pool.</div>
             <div className="help-p"><b>Does the AI know if I flag or ban exercises?</b> Yes. Flags increase frequency; bans remove them entirely.</div>
             <div className="help-p"><b>Can I use this offline?</b> Partly. While the browser tab stays open, LOG and HISTORY continue to work with no network. A cold reload needs internet (the app isn't cached offline). AI generation always needs internet.</div>
