@@ -96,7 +96,13 @@ function importData(file,onDone){
       }
       if(data.videoLogs&&typeof data.videoLogs==="object")localStorage.setItem("ironlog:video-logs",JSON.stringify(data.videoLogs));
       if(Array.isArray(data.lvl3Sessions))localStorage.setItem("ironlog:lvl3-sessions",JSON.stringify(data.lvl3Sessions));
-      if(data.profile&&typeof data.profile==="object")saveProfile({...DEFAULT_PROFILE,...data.profile});
+      if(data.profile&&typeof data.profile==="object"){
+        // Imported profiles that lack gymType default to "commercial" (safe/broad) rather than "planet-fitness".
+        // Only the user's own in-browser upgrade preserves PF (that path is in loadProfile).
+        const merged={...DEFAULT_PROFILE,...data.profile};
+        if(!data.profile.gymType)merged.gymType="commercial";
+        saveProfile(merged);
+      }
       onDone(true);
     }catch(err){onDone(false,err.message);}
   };
@@ -719,7 +725,7 @@ const css=`
   .logo{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--accent);line-height:1;}
   .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
-  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:2px 1px;margin-left:0;line-height:1;}
+  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:36px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
   .nav-btn{flex:1;padding:11px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
@@ -759,8 +765,8 @@ const css=`
   .exercise-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;}
   .exercise-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text);margin-bottom:2px;}
   .exercise-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);margin-bottom:4px;}
-  .set-row{display:flex;gap:6px;align-items:center;}
-  .set-input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;border-radius:4px;outline:none;text-align:center;}
+  .set-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+  .set-input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 6px;font-family:'IBM Plex Mono',monospace;font-size:14px;border-radius:4px;outline:none;text-align:center;min-height:44px;box-sizing:border-box;}
   .set-input:focus{border-color:var(--accent);}
   .set-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);width:30px;text-align:center;}
   .btn-add-set{font-size:11px;padding:6px 12px;background:var(--surface2);border:1px dashed var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;}
@@ -805,6 +811,7 @@ const css=`
   .note-input:focus{border-color:var(--accent);}
   .chevron{font-size:12px;transition:transform 0.2s;color:var(--muted);}
   .chevron.open{transform:rotate(180deg);}
+  .chevron-btn{background:none;border:none;cursor:pointer;padding:12px 10px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
   .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;}
   .stat-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);line-height:1;}
@@ -883,6 +890,8 @@ const css=`
   .session-timer-btn.reset{border-color:var(--border);color:var(--muted);}
   .session-rest-bar{margin-top:10px;padding:12px;background:var(--surface2);border:1px solid var(--accent2);border-radius:6px;display:flex;align-items:center;gap:10px;}
   .session-rest-countdown{flex:1;font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent2);letter-spacing:1px;}
+  .session-rest-done{margin-top:10px;padding:16px 12px;background:var(--accent);color:var(--bg);border-radius:6px;text-align:center;cursor:pointer;animation:rest-done-flash 0.4s ease-in-out;}
+  @keyframes rest-done-flash{0%{transform:scale(0.95);opacity:0.3;}100%{transform:scale(1);opacity:1;}}
   .exercise-time-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:2px;}
   .history-duration{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:1px;margin-top:2px;}
   .profile-field{margin-bottom:12px;}
@@ -969,9 +978,9 @@ function ProfileModal({profile,onSave,onClose,onReset}){
         <div className="profile-field">
           <label className="profile-label">Grip strength</label>
           <select className="profile-input" value={p.gripStrength} onChange={e=>upd("gripStrength",e.target.value)}>
-            <option value="weak">weak — needs grip finisher</option>
+            <option value="weak">weak</option>
             <option value="average">average</option>
-            <option value="strong">strong — no special grip work</option>
+            <option value="strong">strong</option>
           </select>
         </div>
 
@@ -980,7 +989,7 @@ function ProfileModal({profile,onSave,onClose,onReset}){
           <select className="profile-input" value={p.armLength} onChange={e=>upd("armLength",e.target.value)}>
             <option value="short">short</option>
             <option value="average">average</option>
-            <option value="long">long — affects pressing mechanics</option>
+            <option value="long">long</option>
           </select>
         </div>
 
@@ -1308,7 +1317,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:4,lineHeight:1.5};if(!last)return(<div style={{...st,color:"var(--border)"}}>LAST: — &nbsp;NEW EXERCISE</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
           AI TARGET: {exercise.aiReps} reps bodyweight
@@ -1344,7 +1353,7 @@ function HistoryItem({entry,onDelete}){
           <div className="history-date">{entry.date}</div>
           <div className="history-tags">
             {muscles.map(m=><span key={m} className="tag">{m}</span>)}
-            <span className="tag">{entry.exercises.length} exercises</span>
+            <span className="tag">{entry.exercises.length} {entry.exercises.length===1?"exercise":"exercises"}</span>
             {entry.durationSec>0&&<span className="tag" style={{color:"var(--accent)"}}>⏱ {formatDuration(entry.durationSec)}</span>}
           </div>
         </div>
@@ -1357,7 +1366,7 @@ function HistoryItem({entry,onDelete}){
             </>
             :<button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:10,color:"var(--muted)",opacity:0.5}} onClick={()=>setConfirming(true)}>✕</button>
           }
-          <span className={`chevron ${open?"open":""}`}>▼</span>
+          <button onClick={e=>{e.stopPropagation();setOpen(!open);}} className={`chevron chevron-btn ${open?"open":""}`} aria-label={open?"Collapse session":"Expand session"} title={open?"Collapse":"Expand"}>▼</button>
         </div>
       </div>
       {open&&(
@@ -1879,13 +1888,15 @@ class ErrorBoundary extends React.Component{
 }
 
 function GymTracker(){
-  const [apiKey,setApiKey]=useState(()=>{
-    const fromHash=extractKeyFromHash();
-    if(fromHash){saveApiKey(fromHash);return fromHash;}
-    return loadApiKey();
-  });
+  // Pending hash key: if a #key= URL is loaded, we stage it here instead of auto-saving,
+  // so the user explicitly confirms before overwriting a stored key (a mitigation against
+  // malicious links tricking users into switching to an attacker's API key).
+  const [pendingHashKey,setPendingHashKey]=useState(()=>extractKeyFromHash());
+  const [apiKey,setApiKey]=useState(()=>loadApiKey());
   const [showKeyModal,setShowKeyModal]=useState(false);
   const [keySkipped,setKeySkipped]=useState(()=>loadKeySkipped());
+  const acceptPendingHashKey=()=>{if(pendingHashKey){saveApiKey(pendingHashKey);setApiKey(pendingHashKey);saveKeySkipped(false);setKeySkipped(false);setPendingHashKey(null);}};
+  const rejectPendingHashKey=()=>{setPendingHashKey(null);};
   const [profile,setProfile]=useState(()=>loadProfile());
   const [showProfileModal,setShowProfileModal]=useState(false);
   const handleSaveProfile=(p)=>{saveProfile(p);setProfile(p);setShowProfileModal(false);};
@@ -1919,6 +1930,8 @@ function GymTracker(){
   const [history,setHistory]=useState(()=>loadHistory());
   const _draft=loadDraftSession();
   const [exercises,setExercises]=useState(_draft?.exercises||[]);
+  // Track whether the current exercise list came from a restored draft — clears on save or clear.
+  const [wasRestoredFromDraft,setWasRestoredFromDraft]=useState(!!(_draft?.exercises?.length));
   const [loadedFromAI,setLoadedFromAI]=useState(_draft?.loadedFromAI||false);
   const [manualAdd,setManualAdd]=useState(false);
   // Clock tick — runs 1Hz while session or rest timer is active
@@ -1928,11 +1941,18 @@ function GymTracker(){
     const id=setInterval(()=>setClockTick(t=>t+1),1000);
     return ()=>clearInterval(id);
   },[sessionTiming,restTimer]);
-  // Rest timer beep when it hits zero
+  const [restDoneFlash,setRestDoneFlash]=useState(false);
+  // Rest timer beep + visible flash banner when it hits zero
   useEffect(()=>{
     if(!restTimer)return;
     const remaining=Math.ceil((restTimer.endTime-Date.now())/1000);
-    if(remaining<=0){beep();if(navigator.vibrate)navigator.vibrate([120,60,120]);setRestTimer(null);}
+    if(remaining<=0){
+      beep();
+      if(navigator.vibrate)navigator.vibrate([120,60,120]);
+      setRestTimer(null);
+      setRestDoneFlash(true);
+      setTimeout(()=>setRestDoneFlash(false),2500);
+    }
   },[clockTick,restTimer]);
   // Per-exercise timing — stamps start on first-data entry, bumps end on each change
   useEffect(()=>{
@@ -2074,7 +2094,7 @@ function GymTracker(){
   const handleSaveKey=(k)=>{saveApiKey(k);setApiKey(k);setShowKeyModal(false);saveKeySkipped(false);setKeySkipped(false);};
   const handleRemoveKey=()=>{saveApiKey("");setApiKey("");setShowKeyModal(false);};
   const handleCloseKeyModal=()=>{setShowKeyModal(false);};
-  const handleSkipKey=()=>{saveKeySkipped(true);setKeySkipped(true);setShowKeyModal(false);};
+  const handleSkipKey=()=>{saveKeySkipped(true);setKeySkipped(true);setShowKeyModal(false);setTab("log");};
   const apiHeaders=()=>({"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
   const addExercise=()=>{
@@ -2108,6 +2128,12 @@ function GymTracker(){
 
   const saveWorkout=()=>{
     if(!exercises.length)return;
+    // Strip empty / zero sets and skip exercises that have no meaningful logged data.
+    // A set with reps:"0" or duration:"0" alone is not a logged set — those are placeholder zeros.
+    const nz=v=>v!==undefined&&v!==null&&v!==""&&Number(v)!==0;
+    const hasAnyData=s=>!!(nz(s.weight)||nz(s.reps)||nz(s.weightL)||nz(s.weightR)||nz(s.repsL)||nz(s.repsR)||nz(s.duration)||nz(s.resistance)||nz(s.calories)||nz(s.assist)||(s.rung!==undefined&&s.rung!=="")||(s.level!==undefined&&s.level!==""));
+    const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData)})).filter(ex=>ex.sets.length>0);
+    if(!cleanedExercises.length){window.alert("No sets have data to save. Enter weight × reps (or duration) on at least one set — zero reps are ignored.");return;}
     const workoutFocus=activeFocus;
     // Capture timing: use endTime if stopped, else now; use startTime if present. Only include if we have a start.
     let durationSec=null,exerciseTimings=null;
@@ -2116,11 +2142,11 @@ function GymTracker(){
       durationSec=Math.max(0,Math.round((end-sessionTiming.startTime)/1000));
       exerciseTimings=sessionTiming.exerciseTimes||{};
     }
-    const entry={id:generateId(),date:today(),dateKey:todayKey(),focus:workoutFocus,exercises,note,savedAt:Date.now(),durationSec,exerciseTimings};
+    const entry={id:generateId(),date:today(),dateKey:todayKey(),focus:workoutFocus,exercises:cleanedExercises,note,savedAt:Date.now(),durationSec,exerciseTimings};
     const updated=[entry,...history];
     setHistory(updated);saveHistory(updated);
     if(navigator.vibrate)navigator.vibrate([40,30,40]);
-    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setManualAdd(false);setFocusOverride(null);clearDraftSession();resetSession();setTab("history");
+    setExercises([]);setNote("");setScanResult(null);setLoadedFromAI(false);setManualAdd(false);setFocusOverride(null);clearDraftSession();resetSession();setWasRestoredFromDraft(false);setTab("history");
   };
 
   const MOVEMENT_KEYWORDS=["press","row","curl","raise","fly","flye","extension","pulldown","pushdown","squat","lunge","deadlift","shrug","crunch","plank","dip","pullup","pull-up","push-up","pushup","kickback","pullover","rotation","twist","carry","hold","hang","bridge","thrust","step","jump","sprint","climb","swing","cable","machine","dumbbell","barbell","smith","incline","decline","seated","standing","single","unilateral","lateral","front","rear","reverse","close","wide","neutral","hammer","concentration","preacher","drag","zottman","overhead","underhand","overhand","Romanian","Bulgarian","Nordic","Copenhagen","Jefferson","hack","sumo","conventional","stiff","straight","lying","prone","supine","bent","arm","leg","chest","back","shoulder","bicep","tricep","glute","quad","hamstring","calf","ab","core","wrist","grip"];
@@ -2378,16 +2404,16 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
 - Pair opposing or complementary muscle groups
 - SESSION FOCUS: ${activeFocus} — this session emphasizes ${activeFocus==="Push"?"Chest, Shoulders, and Triceps (at least 3 push exercises)":activeFocus==="Pull"?"Back and Biceps (at least 3 pull exercises)":"Legs (at least 3 leg exercises)"}
 - No muscle group should be skipped entirely — always include at least 1 exercise from each of: Push muscles (Chest/Shoulders/Triceps), Pull muscles (Back/Biceps), Legs, Core
-- MUST include at least 1 core exercise
-- MUST include at least 1 forearm/grip exercise — place in the finisher only, never in supersets
-- Chest is a PRIORITY — user feels chest is falling behind. Always include at least 1 chest exercise regardless of focus day
+- MUST include at least 1 core exercise${profile.gripStrength==="weak"?`
+- MUST include at least 1 forearm/grip exercise — place in the finisher only, never in supersets`:""}${profile.priorityMuscle?`
+- ${profile.priorityMuscle} is a PRIORITY — user wants emphasis on ${profile.priorityMuscle}. Always include at least 1 ${profile.priorityMuscle} exercise regardless of focus day`:""}
 - WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with last logged weight and completion status. You MUST use these weights as your baseline. NEVER suggest a weight lower than the last logged weight — this is a hard rule with no exceptions. If all reps were completed: suggest last weight +${profile.compoundIncrement||5}lb for compounds, +${profile.isolationIncrement||2.5}lb for isolation. If reps were not completed: suggest the exact same weight as last time. If no history exists: make a reasonable starting estimate based on the exercise type.
 - For unilateral exercises left and right are logged separately. Respect the user's dumbbell max from the USER CONTEXT above.
-- BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Bench Dips, Plank, all TRX exercises like TRX Row / TRX Chest Press / TRX Bicep Curl, etc.) must have weight set to "bodyweight" — never assign a number weight to these
-- SPECIAL EQUIPMENT TYPES with no weight field:
-  * TIMED exercises (Plank, Wall Sit, Dead Hang, TRX Plank, all Stretching entries): log seconds only, set reps to duration in seconds and weight to "bodyweight"
-  * PF360 RUNG exercises (PF360 Pushup + Climber): user picks a rung 1–5 on the rig (LOWER rung = HARDER) and holds for seconds. Do NOT assign weight; suggest target rung and seconds in the notes/reps field
-  * ELEVATE CORE LEVEL exercises (Elevate Core Dynamic Plank timed, Elevate Core Scrunch reps-based): user picks level 1–7 (HIGHER level = HARDER). Do NOT assign weight; suggest target level and duration/reps in the notes
+- BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Bench Dips, Plank, etc.) must have weight set to "bodyweight" — never assign a number weight to these
+- TIMED exercises (Plank, Wall Sit, Dead Hang, all Stretching entries): log seconds only, set reps to duration in seconds and weight to "bodyweight"${profile.gymType==="planet-fitness"?`
+- TRX exercises (TRX Row, TRX Chest Press, TRX Bicep Curl, TRX Plank, etc.) — treat as bodyweight × reps (or seconds for TRX Plank)
+- PF360 RUNG exercises (PF360 Pushup + Climber): user picks a rung 1–5 on the rig (LOWER rung = HARDER) and holds for seconds. Do NOT assign weight; suggest target rung and seconds in the notes/reps field
+- ELEVATE CORE LEVEL exercises (Elevate Core Dynamic Plank timed, Elevate Core Scrunch reps-based): user picks level 1–7 (HIGHER level = HARDER). Do NOT assign weight; suggest target level and duration/reps in the notes`:""}
 - STRETCHING group: only use stretches as an optional cool-down block AFTER the main workout, never as a superset partner during strength work
 - COMBO exercises (dumbbell complexes like "Squat to Press", "Man Maker", "Curl to Press"): these chain 2–4 movements with one dumbbell weight. Use as conditioning finishers or standalone sessions, not as superset partners for isolation work. Weight = the limiting movement's max
 - Equipment constraints come from the USER CONTEXT (gym type) above — follow them strictly. If the user's gym has no barbells, substitute Smith Machine or dumbbell versions.
@@ -2422,7 +2448,7 @@ CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
 FINISHER (${intensity===2?"15":"10"}-min circuit to spike heart rate):
 - ${intensity===2?"4-5":"3-4"} exercises back-to-back with minimal rest
 - ${intensity===2?"LEVEL 2: Push hard — sprints, burpees, battle movements. Max effort throughout.":"Use cardio machines or bodyweight available at the user's gym (per USER CONTEXT above)."}
-- MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — user has weak grip and long arms, grip work goes here at end of session only
+${profile.gripStrength==="weak"?"- MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — place in the finisher at end of session only":""}
 
 Respond ONLY with valid JSON in this exact format (no other text):
 {"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"cardio machine 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${intensity===2?"15":"10"}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}`;
@@ -2467,7 +2493,25 @@ Respond ONLY with valid JSON in this exact format (no other text):
   return(
     <>
       <style>{css}</style>
-      {((!apiKey&&!keySkipped)||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal} onSkip={handleSkipKey}/>}
+      {pendingHashKey&&(
+        <div className="key-modal-overlay">
+          <div className="key-modal">
+            <div className="key-modal-title" style={{color:apiKey?"var(--accent2)":"var(--accent)"}}>{apiKey?"⚠ REPLACE SAVED KEY?":"API KEY FROM LINK"}</div>
+            <div className="key-modal-desc" style={{marginBottom:14,lineHeight:1.5}}>
+              {apiKey?(
+                <>This link contains an API key that would <b>replace your currently saved key</b>. Only accept if the link came from a source you trust. Malicious links can trick you into switching to someone else's API key — your workout data would then be sent to their account.</>
+              ):(
+                <>This link contains an API key for the AI features. Save it to this device? Only accept if the link came from a source you trust.</>
+              )}
+            </div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"var(--muted)",background:"var(--surface2)",padding:"8px 10px",borderRadius:4,marginBottom:14,wordBreak:"break-all"}}>Key starts: <b style={{color:"var(--text)"}}>{pendingHashKey.slice(0,12)}…</b></div>
+            <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={acceptPendingHashKey}>{apiKey?"REPLACE KEY":"SAVE & USE THIS KEY"}</button>
+            <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={rejectPendingHashKey}>CANCEL — DON'T USE THIS KEY</button>
+            <div className="key-note" style={{marginTop:12}}>LINK KEYS ARE A COMMON PHISHING VECTOR · CONFIRM THE SENDER</div>
+          </div>
+        </div>
+      )}
+      {!pendingHashKey&&((!apiKey&&!keySkipped)||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal} onSkip={handleSkipKey}/>}
       {showProfileModal&&<ProfileModal profile={profile} onSave={handleSaveProfile} onClose={()=>setShowProfileModal(false)} onReset={handleResetProfile}/>}
       {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)}/>}
       {showDataModal&&<DataModal onClose={()=>setShowDataModal(false)} onImportDone={()=>{setHistory(loadHistory());setShowDataModal(false);}}/>}
@@ -2551,12 +2595,18 @@ Respond ONLY with valid JSON in this exact format (no other text):
                           <button className="session-timer-btn" onClick={cancelRestTimer}>SKIP</button>
                         </div>
                       )}
+                      {restDoneFlash&&(
+                        <div className="session-rest-done" onClick={()=>setRestDoneFlash(false)}>
+                          <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2}}>⚡ REST DONE — GO</div>
+                          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,marginTop:2,opacity:0.8}}>tap to dismiss</div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
               );
             })()}
-            {_draft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
+            {wasRestoredFromDraft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
             {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
             {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add an exercise to this plan</button>}
             {(!loadedFromAI||manualAdd)&&(
@@ -2971,7 +3021,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p">The only data that ever leaves your device is what you send to Anthropic when generating an AI plan (your recent history summary). Anthropic's privacy terms apply to that.</div>
 
             <div className="section-label">Troubleshooting</div>
-            <div className="help-p"><b>After an update, I don't see the new features.</b> Your browser cached the old version. Add <code>?v=2</code> (or 3, 4, any number) to the URL to force a fresh load. On the home-screen app, fully close and reopen it.</div>
+            <div className="help-p"><b>After an update, I don't see the new features.</b> Your browser cached the old version. Pull-to-refresh (mobile) or press Ctrl+Shift+R (desktop) to force a reload. If it still looks old, fully close the browser tab or home-screen app and reopen it.</div>
             <div className="help-p"><b>AI gives an error.</b> Check <b>status.anthropic.com</b>. Most errors are: invalid/missing API key, no credits, or a model retirement. The app's model can be updated if that happens.</div>
             <div className="help-p"><b>Black screen.</b> Rare, and usually a CDN loading issue on the first load. Refresh once. If it persists, try incognito mode.</div>
 
