@@ -399,6 +399,50 @@ function getMergedLibrary(){
   _mergedLibraryCache=base;
   return base;
 }
+// PF-specific items: the only four exercises that are literally Planet Fitness branded gear.
+// Commercial-gym users who don't go to PF should NOT see these in their AI picks.
+const PF_SPECIFIC_EXERCISES=["PF360 Pushup + Climber","Elevate Core Dynamic Plank","Elevate Core Scrunch","TRUE Stretch Routine"];
+// Exercises that genuinely need gym equipment the user may not have at a home or hotel gym.
+// Pattern-based match PLUS an explicit list of common misses (Lat Pulldown, Leg Press, etc. — no "Machine" suffix in the name).
+const GYM_ONLY_EXPLICIT=new Set([
+  // Machines without "Machine" suffix
+  "Lat Pulldown","Wide-Grip Lat Pulldown","Close-Grip Lat Pulldown","Reverse-Grip Lat Pulldown","Straight-Arm Pulldown",
+  "Seated Row","Wide-Grip Seated Row","Close-Grip Seated Row","T-Bar Row",
+  "Leg Press","Single-Leg Press","Hack Squat","Leg Extension","Single-Leg Extension","Leg Curl","Lying Leg Curl","Seated Leg Curl","Single-Leg Curl",
+  "Calf Raise Machine","Seated Calf Raise","Standing Calf Raise",
+  "Chest Fly Machine","Pec Deck","Reverse Pec Deck",
+  "Preacher Curl Machine","Tricep Dip Machine","Assisted Pull-Up Machine","Assisted Dip Machine",
+  "Assisted Chin-Up (Wide Grip)","Assisted Chin-Up (Neutral Grip)","Assisted Chin-Up (Narrow Grip)",
+  "Assisted Dip (Narrow Grip)","Assisted Dip (Wide Grip)","Assisted Dip (Neutral Grip)",
+  "Rope Pushdown","Straight-Bar Pushdown","V-Bar Pushdown",
+  "Hyperextension","Reverse Hyperextension","Glute-Ham Raise",
+  // Pull-up variants (hotel/home may not have a bar)
+  "Pull-Ups","Chin-Ups","Wide-Grip Pull-Ups","Close-Grip Pull-Ups","Neutral-Grip Pull-Ups","Mixed-Grip Pull-Ups",
+  "Chest Dips","Tricep Dips","Bench Dips",
+  "Battle Ropes",
+]);
+// Cardio machines that aren't portable/available at home or basic hotel gyms.
+const CARDIO_MACHINE_EXERCISES=new Set([
+  "Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg",
+]);
+// Build the set of exercises excluded from the AI's "suggest from this list" based on gym type.
+function buildGymExclusionSet(gymType,library){
+  const g=gymType||"commercial";
+  const exclude=new Set();
+  // Commercial gyms don't necessarily have PF-branded gear; exclude the 4 PF items from commercial too.
+  if(g==="commercial"||g==="home"||g==="hotel-basic"){PF_SPECIFIC_EXERCISES.forEach(e=>exclude.add(e));}
+  if(g==="planet-fitness"||g==="commercial")return exclude;
+  // Pattern + explicit matches for home/hotel
+  Object.values(library).forEach(group=>group.forEach(ex=>{
+    if(/^Smith /.test(ex)||/\bCable\b/.test(ex)||/\bMachine$/.test(ex)||/\bMachine\b/.test(ex)||/^TRX /.test(ex))exclude.add(ex);
+    if(GYM_ONLY_EXPLICIT.has(ex))exclude.add(ex);
+    if(CARDIO_MACHINE_EXERCISES.has(ex))exclude.add(ex);
+  }));
+  // Hotel-basic is more restrictive: also drop treadmill-adjacent cardio that a hotel might not have (handled above),
+  // plus any heavier dumbbell-dependent compounds that assume a heavy bench + rack. For now the pattern list already catches
+  // the big items; the hotel vs home difference lives in the user's dumbbellMax field in the profile.
+  return exclude;
+}
 const EXERCISE_LIBRARY={
   Chest:[
     "Smith Machine Bench Press",
@@ -1704,22 +1748,28 @@ function ProgressTab({history}){
 
 const ALL_CARDIO_EQUIPMENT=["Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Jump Rope"];
 
-function CardioEquipmentModal({selected,onSave,onClose}){
+function CardioEquipmentModal({selected,onSave,onClose,gymType}){
   const [choices,setChoices]=useState(selected);
   const toggle=(eq)=>setChoices(prev=>prev.includes(eq)?prev.filter(e=>e!==eq):[...prev,eq]);
+  // Equipment that typically doesn't live at a home or hotel gym. We still render all options, but
+  // sort the likely-not-available ones to the bottom with a muted "unlikely at your gym" hint.
+  const UNLIKELY_AT_HOME=new Set(["Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]);
+  const UNLIKELY_AT_HOTEL=new Set(["Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike"]);
+  const unlikely=gymType==="home"?UNLIKELY_AT_HOME:gymType==="hotel-basic"?UNLIKELY_AT_HOTEL:new Set();
+  const sorted=[...ALL_CARDIO_EQUIPMENT].sort((a,b)=>{const ua=unlikely.has(a)?1:0;const ub=unlikely.has(b)?1:0;return ua-ub;});
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:24,width:"100%",maxWidth:360}}>
         <div style={{fontFamily:"Bebas Neue",fontSize:20,letterSpacing:3,color:"var(--accent)",marginBottom:4}}>CARDIO EQUIPMENT</div>
         <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:20}}>SELECT WHAT YOUR GYM HAS — USED FOR ACTIVE REST BURSTS</div>
-        {ALL_CARDIO_EQUIPMENT.map(eq=>(
-          <div key={eq} onClick={()=>toggle(eq)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+        {sorted.map(eq=>{const isUnlikely=unlikely.has(eq);return(
+          <div key={eq} onClick={()=>toggle(eq)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)",cursor:"pointer",opacity:isUnlikely?0.55:1}}>
             <div style={{width:18,height:18,borderRadius:4,border:"2px solid",borderColor:choices.includes(eq)?"var(--accent)":"var(--muted)",background:choices.includes(eq)?"var(--accent)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               {choices.includes(eq)&&<span style={{color:"#000",fontSize:12,fontWeight:"bold"}}>✓</span>}
             </div>
             <span style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{eq}</span>
-          </div>
-        ))}
+            {isUnlikely&&<span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginLeft:"auto"}}>UNLIKELY</span>}
+          </div>);})}
         <button className="btn btn-accent" style={{width:"100%",marginTop:20,padding:12}} onClick={()=>{saveCardioEquipment(choices);onSave(choices);onClose();}}>SAVE</button>
         <button className="btn btn-ghost" style={{width:"100%",marginTop:8,padding:10,fontSize:11}} onClick={onClose}>CANCEL</button>
       </div>
@@ -2171,8 +2221,18 @@ function GymTracker(){
       if(nz(s.duration)||nz(s.calories))return true;
       return false;
     };
+    // Count sets before and after cleaning so we can warn the user if any complete-looking rows were silently dropped.
+    const beforeSetCount=exercises.reduce((s,ex)=>s+((ex.sets||[]).length),0);
+    const beforeNonEmpty=exercises.reduce((s,ex)=>s+((ex.sets||[]).filter(st=>Object.keys(st).some(k=>k!=="id"&&st[k]!==undefined&&st[k]!=="")).length),0);
     const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData)})).filter(ex=>ex.sets.length>0);
+    const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
+    // If the user had sets with partial data (e.g. weight typed but no reps), warn before dropping them silently.
+    const droppedWithData=beforeNonEmpty-afterSetCount;
+    if(droppedWithData>0){
+      const proceed=window.confirm(`${droppedWithData} ${droppedWithData===1?"set has":"sets have"} incomplete data (e.g. weight without reps) and will be dropped.\n\nSave the ${afterSetCount} complete ${afterSetCount===1?"set":"sets"} anyway?`);
+      if(!proceed)return;
+    }
     const workoutFocus=activeFocus;
     // Capture timing: use endTime if stopped, else now; use startTime if present. Only include if we have a start.
     let durationSec=null,exerciseTimings=null;
@@ -2272,7 +2332,8 @@ function GymTracker(){
     try{
       const base64=await resizeImage(file);
       const _unavail=loadUnavailableExercises();
-      const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!_unavail.includes(ex)).join(", ")}`).join("\n");
+      const _scanGymExcl=buildGymExclusionSet(profile.gymType,getMergedLibrary());
+      const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!_unavail.includes(ex)&&!_scanGymExcl.has(ex)).join(", ")}`).filter(line=>!line.endsWith(": ")).join("\n");
       const prompt=`Identify the gym equipment in the photo and map to this list:\n${exerciseList}\n\nRespond ONLY with JSON:\n{"identified":"short name","muscle":"exact muscle group","exercise":"exact exercise name","confidence":"high|medium|low","note":"max 10 words"}\n\nIf no gym equipment: {"identified":null,"muscle":null,"exercise":null,"confidence":"low","note":"Could not identify gym equipment."}`;
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:apiHeaders(),
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:300,
@@ -2291,31 +2352,9 @@ function GymTracker(){
     setAiLoading(true);setAiPlan(null);setAiError(null);setAllRefusedExercises([]);setTab("ai");
     try{
     const unavailableExercises=loadUnavailableExercises();
-    // Gym-type exclusions: a Home or Hotel user shouldn't see Smith machines, PF rig items, or cable isolation
-    // offered up as "suggest these next" picks. PF users keep PF items. Commercial users keep everything.
-    const gymExclusionList=(()=>{
-      const g=profile.gymType||"commercial";
-      if(g==="planet-fitness"||g==="commercial")return [];
-      const PF_SPECIFIC=["PF360 Pushup + Climber","Elevate Core Dynamic Plank","Elevate Core Scrunch","TRUE Stretch Routine"];
-      const SMITH_PATTERNS=/^Smith /;
-      const CABLE_PATTERNS=/\bCable\b/;
-      const MACHINE_PATTERNS=/\bMachine$/;
-      const TRX_PATTERNS=/^TRX /;
-      const exclude=new Set(PF_SPECIFIC);
-      if(g==="home"){
-        // Home: no cables, no Smith, no gym machines, no TRX (unless user has them — notes handle that)
-        Object.values(getMergedLibrary()).forEach(group=>group.forEach(ex=>{
-          if(SMITH_PATTERNS.test(ex)||CABLE_PATTERNS.test(ex)||MACHINE_PATTERNS.test(ex)||TRX_PATTERNS.test(ex))exclude.add(ex);
-        }));
-      } else if(g==="hotel-basic"){
-        // Hotel basic: just dumbbells, bench, treadmill — exclude cables, Smith, machines, TRX, specialty rigs
-        Object.values(getMergedLibrary()).forEach(group=>group.forEach(ex=>{
-          if(SMITH_PATTERNS.test(ex)||CABLE_PATTERNS.test(ex)||MACHINE_PATTERNS.test(ex)||TRX_PATTERNS.test(ex))exclude.add(ex);
-        }));
-      }
-      return Array.from(exclude);
-    })();
-    const isExcludedByGym=ex=>gymExclusionList.includes(ex);
+    // Gym-type exclusions: Commercial users drop PF-specific items; Home/Hotel also drop Smith / Cables / Machines / TRX / cardio machines / pull-up bars.
+    const gymExclusionSet=buildGymExclusionSet(profile.gymType,getMergedLibrary());
+    const isExcludedByGym=ex=>gymExclusionSet.has(ex);
     const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!(unavailableExercises||[]).includes(ex)&&!isExcludedByGym(ex)).join(", ")}`).filter(line=>!line.endsWith(": ")).join("\n");
 
     const exerciseHistory={};
@@ -2577,7 +2616,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
       )}
       {!pendingHashKey&&((!apiKey&&!keySkipped)||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal} onSkip={handleSkipKey}/>}
       {showProfileModal&&<ProfileModal profile={profile} onSave={handleSaveProfile} onClose={()=>setShowProfileModal(false)} onReset={handleResetProfile}/>}
-      {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)}/>}
+      {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)} gymType={profile.gymType}/>}
       {showDataModal&&<DataModal onClose={()=>setShowDataModal(false)} onImportDone={()=>{setHistory(loadHistory());setShowDataModal(false);}}/>}
       {showPlaylistModal&&<PlaylistModal playlists={playlists} activePlaylist={activePlaylist} onSave={(list,active)=>{setPlaylists(list);setActivePlaylist(active);savePlaylists(list);saveActivePlaylist(active);}} onClose={()=>setShowPlaylistModal(false)}/>}
       <div className="app">
@@ -2693,17 +2732,28 @@ Respond ONLY with valid JSON in this exact format (no other text):
                     <button className="scan-dismiss" onClick={()=>setScanResult(null)}>×</button>
                   </div>
                 )}
-                <div className="row" style={{marginBottom:8}}>
-                  <select className="input" value={selectedMuscle} onChange={e=>{setSelectedMuscle(e.target.value);setSelectedExercise(getMergedLibrary()[e.target.value][0]);setScanResult(null);}}>
-                    {MUSCLE_GROUPS.map(m=><option key={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="row" style={{marginBottom:12}}>
-                  <select className="input" value={selectedExercise} onChange={e=>{setSelectedExercise(e.target.value);setScanResult(null);}}>
-                    {(getMergedLibrary()[selectedMuscle]||[]).map(ex=><option key={ex}>{ex}</option>)}
-                  </select>
-                  <button className="btn btn-accent" onClick={addExercise}>ADD</button>
-                </div>
+                {(()=>{
+                  // Filter picker by gym type — same exclusion set the AI uses, applied to muscle groups + exercises.
+                  const _gymExcl=buildGymExclusionSet(profile.gymType,getMergedLibrary());
+                  const _pickerLib=Object.fromEntries(Object.entries(getMergedLibrary()).map(([m,exs])=>[m,exs.filter(ex=>!_gymExcl.has(ex))]).filter(([m,exs])=>exs.length>0));
+                  const _availableMuscles=MUSCLE_GROUPS.filter(m=>_pickerLib[m]&&_pickerLib[m].length>0);
+                  const _effMuscle=_availableMuscles.includes(selectedMuscle)?selectedMuscle:(_availableMuscles[0]||"Chest");
+                  const _exs=_pickerLib[_effMuscle]||[];
+                  const _effExercise=_exs.includes(selectedExercise)?selectedExercise:(_exs[0]||"");
+                  return(<>
+                    <div className="row" style={{marginBottom:8}}>
+                      <select className="input" value={_effMuscle} onChange={e=>{const next=e.target.value;setSelectedMuscle(next);setSelectedExercise((_pickerLib[next]||[""])[0]);setScanResult(null);}}>
+                        {_availableMuscles.map(m=><option key={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className="row" style={{marginBottom:12}}>
+                      <select className="input" value={_effExercise} onChange={e=>{setSelectedExercise(e.target.value);setScanResult(null);}}>
+                        {_exs.map(ex=><option key={ex}>{ex}</option>)}
+                      </select>
+                      <button className="btn btn-accent" onClick={addExercise}>ADD</button>
+                    </div>
+                  </>);
+                })()}
               </>
             )}
             {exercises.length>0&&(
