@@ -727,7 +727,7 @@ const css=`
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
   .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:36px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
-  .nav-btn{flex:1;padding:11px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
+  .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
   .content{padding:20px;}
@@ -747,7 +747,7 @@ const css=`
   .btn-accent:disabled{opacity:0.4;cursor:not-allowed;}
   .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}
   .btn-ghost:hover{border-color:var(--text);color:var(--text);}
-  .btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:6px 10px;font-size:11px;}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:12px 14px;font-size:11px;min-height:44px;min-width:44px;}
   .btn-danger:hover{border-color:var(--danger);}
   .scan-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:var(--surface);border:1px dashed var(--accent);border-radius:6px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;}
   .scan-btn:hover{background:rgba(200,241,53,0.06);}
@@ -769,10 +769,10 @@ const css=`
   .set-input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 6px;font-family:'IBM Plex Mono',monospace;font-size:14px;border-radius:4px;outline:none;text-align:center;min-height:44px;box-sizing:border-box;}
   .set-input:focus{border-color:var(--accent);}
   .set-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);width:30px;text-align:center;}
-  .btn-add-set{font-size:11px;padding:6px 12px;background:var(--surface2);border:1px dashed var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;}
+  .btn-add-set{font-size:11px;padding:12px 14px;background:var(--surface2);border:1px dashed var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
   .btn-add-set:hover{border-color:var(--accent);color:var(--accent);}
   .divider{border:none;border-top:1px solid var(--border);margin:20px 0;}
-  .btn-swap{font-size:10px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;}
+  .btn-swap{font-size:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
   .btn-swap:hover{border-color:var(--accent2);color:var(--accent2);}
   .swap-drawer{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:10px;}
   .swap-drawer-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
@@ -1170,10 +1170,18 @@ function RestTimer({seconds,activeRest}){
   const [timeLeft,setTimeLeft]=useState(null);
   const [running,setRunning]=useState(false);
   const ref=useRef(null);
-  const start=()=>{setTimeLeft(seconds);setRunning(true);};
+  const alertedRef=useRef(false);
+  const start=()=>{setTimeLeft(seconds);setRunning(true);alertedRef.current=false;};
   useEffect(()=>{
     if(running&&timeLeft>0){ref.current=setTimeout(()=>setTimeLeft(t=>t-1),1000);}
-    else if(timeLeft===0){setRunning(false);}
+    else if(timeLeft===0){
+      setRunning(false);
+      if(!alertedRef.current){
+        alertedRef.current=true;
+        try{beep();}catch(e){}
+        if(typeof navigator!=="undefined"&&navigator.vibrate)navigator.vibrate([120,60,120]);
+      }
+    }
     return()=>clearTimeout(ref.current);
   },[running,timeLeft]);
   const mins=Math.floor((timeLeft||0)/60);
@@ -1294,10 +1302,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-          <button onClick={onMoveUp} disabled={!canMoveUp} title="Move up" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveUp?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveUp?"var(--accent)":"var(--muted)",opacity:canMoveUp?1:0.4,padding:"5px 7px"}}>↑</button>
-          <button onClick={onMoveDown} disabled={!canMoveDown} title="Move down" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveDown?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveDown?"var(--accent)":"var(--muted)",opacity:canMoveDown?1:0.4,padding:"5px 7px"}}>↓</button>
-          <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"2px 4px",transition:"opacity 0.15s"}}>🚫</button>
-          <button onClick={handleFlag} title={flagged?"Remove difficulty flag":"Flag as needs work"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:flagged?1:0.3,padding:"2px 4px",transition:"opacity 0.15s"}}>🚩</button>
+          <button onClick={onMoveUp} disabled={!canMoveUp} title="Move up" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveUp?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveUp?"var(--accent)":"var(--muted)",opacity:canMoveUp?1:0.4,padding:"12px 10px",minWidth:44,minHeight:44}}>↑</button>
+          <button onClick={onMoveDown} disabled={!canMoveDown} title="Move down" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveDown?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveDown?"var(--accent)":"var(--muted)",opacity:canMoveDown?1:0.4,padding:"12px 10px",minWidth:44,minHeight:44}}>↓</button>
+          <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚫</button>
+          <button onClick={handleFlag} title={flagged?"Remove difficulty flag":"Flag as needs work"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:flagged?1:0.3,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚩</button>
           {allowSwap&&<button className="btn-swap" onClick={()=>setSwapOpen(o=>!o)}>{swapOpen?"CANCEL":"⇄ SWAP"}</button>}
           <button className="btn btn-danger" onClick={onRemove}>Remove</button>
         </div>
@@ -1942,7 +1950,8 @@ function GymTracker(){
     return ()=>clearInterval(id);
   },[sessionTiming,restTimer]);
   const [restDoneFlash,setRestDoneFlash]=useState(false);
-  // Rest timer beep + visible flash banner when it hits zero
+  const restDoneFlashTimer=useRef(null);
+  // Rest timer beep + visible flash banner when it hits zero. Clears any prior flash timer so back-to-back rests reset cleanly.
   useEffect(()=>{
     if(!restTimer)return;
     const remaining=Math.ceil((restTimer.endTime-Date.now())/1000);
@@ -1951,9 +1960,11 @@ function GymTracker(){
       if(navigator.vibrate)navigator.vibrate([120,60,120]);
       setRestTimer(null);
       setRestDoneFlash(true);
-      setTimeout(()=>setRestDoneFlash(false),2500);
+      if(restDoneFlashTimer.current)clearTimeout(restDoneFlashTimer.current);
+      restDoneFlashTimer.current=setTimeout(()=>{setRestDoneFlash(false);restDoneFlashTimer.current=null;},2500);
     }
   },[clockTick,restTimer]);
+  useEffect(()=>()=>{if(restDoneFlashTimer.current)clearTimeout(restDoneFlashTimer.current);},[]);
   // Per-exercise timing — stamps start on first-data entry, bumps end on each change
   useEffect(()=>{
     if(!sessionTiming||!sessionTiming.startTime||sessionTiming.endTime)return;
@@ -2119,7 +2130,12 @@ function GymTracker(){
     if(bw&&!isNaN(parseFloat(bw)))saveBodyweight(parseFloat(bw));
   };
   const updateExercise=(id,u)=>setExercises(prev=>prev.map(e=>e.id===id?u:e));
-  const removeExercise=(id)=>setExercises(prev=>prev.filter(e=>e.id!==id));
+  const removeExercise=(id)=>setExercises(prev=>{
+    const next=prev.filter(e=>e.id!==id);
+    // If the user has emptied the list, clear the restored-draft marker so a new list isn't mistaken for restored.
+    if(next.length===0)setWasRestoredFromDraft(false);
+    return next;
+  });
   const moveExercise=(id,dir)=>setExercises(prev=>{
     const i=prev.findIndex(e=>e.id===id);if(i<0)return prev;
     const j=dir==="up"?i-1:i+1;if(j<0||j>=prev.length)return prev;
@@ -2128,12 +2144,35 @@ function GymTracker(){
 
   const saveWorkout=()=>{
     if(!exercises.length)return;
-    // Strip empty / zero sets and skip exercises that have no meaningful logged data.
-    // A set with reps:"0" or duration:"0" alone is not a logged set — those are placeholder zeros.
+    // Strip empty / zero / incomplete sets and skip exercises that have no meaningful logged data.
+    // Rules for what counts as a *complete* set (the one that lands in HISTORY):
+    //   - Bilateral weighted: needs BOTH weight AND reps (nonzero)
+    //   - Unilateral: needs at least one side with both weight and reps
+    //   - Bodyweight/assisted: needs reps alone
+    //   - Timed (plain / rung / level): needs duration (seconds) OR reps nonzero
+    //   - Cardio: needs duration OR calories (level alone is incomplete)
+    // Rung "0" and Level "0" still count as valid picks since 0 is a legitimate dial setting on some machines.
     const nz=v=>v!==undefined&&v!==null&&v!==""&&Number(v)!==0;
-    const hasAnyData=s=>!!(nz(s.weight)||nz(s.reps)||nz(s.weightL)||nz(s.weightR)||nz(s.repsL)||nz(s.repsR)||nz(s.duration)||nz(s.resistance)||nz(s.calories)||nz(s.assist)||(s.rung!==undefined&&s.rung!=="")||(s.level!==undefined&&s.level!==""));
+    const hasAnyData=s=>{
+      // weighted: both weight and reps
+      if(nz(s.weight)&&nz(s.reps))return true;
+      // unilateral: at least one complete side
+      if((nz(s.weightL)&&nz(s.repsL))||(nz(s.weightR)&&nz(s.repsR)))return true;
+      // assisted: weight-field 0/bw plus reps counts as bodyweight; assist with reps counts
+      if(nz(s.assist)&&nz(s.reps))return true;
+      // bodyweight: reps alone (no weight field expected)
+      if(nz(s.reps)&&!s.weight&&!s.weightL&&!s.weightR)return true;
+      // timed with rung or level: duration present
+      if((s.rung!==undefined&&s.rung!=="")&&nz(s.duration))return true;
+      if((s.level!==undefined&&s.level!=="")&&(nz(s.duration)||nz(s.reps)))return true;
+      // plain timed
+      if(nz(s.duration)&&!s.weight&&(s.rung===undefined||s.rung==="")&&(s.level===undefined||s.level===""))return true;
+      // cardio
+      if(nz(s.duration)||nz(s.calories))return true;
+      return false;
+    };
     const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData)})).filter(ex=>ex.sets.length>0);
-    if(!cleanedExercises.length){window.alert("No sets have data to save. Enter weight × reps (or duration) on at least one set — zero reps are ignored.");return;}
+    if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
     const workoutFocus=activeFocus;
     // Capture timing: use endTime if stopped, else now; use startTime if present. Only include if we have a start.
     let durationSec=null,exerciseTimings=null;
@@ -2252,7 +2291,32 @@ function GymTracker(){
     setAiLoading(true);setAiPlan(null);setAiError(null);setAllRefusedExercises([]);setTab("ai");
     try{
     const unavailableExercises=loadUnavailableExercises();
-    const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!(unavailableExercises||[]).includes(ex)).join(", ")}`).join("\n");
+    // Gym-type exclusions: a Home or Hotel user shouldn't see Smith machines, PF rig items, or cable isolation
+    // offered up as "suggest these next" picks. PF users keep PF items. Commercial users keep everything.
+    const gymExclusionList=(()=>{
+      const g=profile.gymType||"commercial";
+      if(g==="planet-fitness"||g==="commercial")return [];
+      const PF_SPECIFIC=["PF360 Pushup + Climber","Elevate Core Dynamic Plank","Elevate Core Scrunch","TRUE Stretch Routine"];
+      const SMITH_PATTERNS=/^Smith /;
+      const CABLE_PATTERNS=/\bCable\b/;
+      const MACHINE_PATTERNS=/\bMachine$/;
+      const TRX_PATTERNS=/^TRX /;
+      const exclude=new Set(PF_SPECIFIC);
+      if(g==="home"){
+        // Home: no cables, no Smith, no gym machines, no TRX (unless user has them — notes handle that)
+        Object.values(getMergedLibrary()).forEach(group=>group.forEach(ex=>{
+          if(SMITH_PATTERNS.test(ex)||CABLE_PATTERNS.test(ex)||MACHINE_PATTERNS.test(ex)||TRX_PATTERNS.test(ex))exclude.add(ex);
+        }));
+      } else if(g==="hotel-basic"){
+        // Hotel basic: just dumbbells, bench, treadmill — exclude cables, Smith, machines, TRX, specialty rigs
+        Object.values(getMergedLibrary()).forEach(group=>group.forEach(ex=>{
+          if(SMITH_PATTERNS.test(ex)||CABLE_PATTERNS.test(ex)||MACHINE_PATTERNS.test(ex)||TRX_PATTERNS.test(ex))exclude.add(ex);
+        }));
+      }
+      return Array.from(exclude);
+    })();
+    const isExcludedByGym=ex=>gymExclusionList.includes(ex);
+    const exerciseList=Object.entries(getMergedLibrary()).map(([m,exs])=>`${m}: ${exs.filter(ex=>!(unavailableExercises||[]).includes(ex)&&!isExcludedByGym(ex)).join(", ")}`).filter(line=>!line.endsWith(": ")).join("\n");
 
     const exerciseHistory={};
     [...history].reverse().forEach(w=>{
@@ -2392,7 +2456,7 @@ function GymTracker(){
       .join(", ");
     // Build list of exercises never done yet, per muscle group
     const neverDone=Object.entries(getMergedLibrary()).map(([muscle,exs])=>{
-      const unused=exs.filter(ex=>!exerciseUsageCount[ex]&&muscle!=="Cardio"&&!(unavailableExercises||[]).includes(ex));
+      const unused=exs.filter(ex=>!exerciseUsageCount[ex]&&muscle!=="Cardio"&&!(unavailableExercises||[]).includes(ex)&&!isExcludedByGym(ex));
       return unused.length?`${muscle}: ${unused.join(", ")}`:null;
     }).filter(Boolean).join("\n");
 
@@ -2831,7 +2895,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             {lvl3View==="list"&&(<>
               <button className="btn btn-accent" style={{width:"100%",marginBottom:14}} onClick={startNewLvl3Session} disabled={lvl3Pool.length===0}>+ NEW CIRCUIT SESSION</button>
               {lvl3Pool.length===0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",textAlign:"center",padding:"20px",lineHeight:1.6}}>No exercises yet.<br/>Add exercises to your videos in PLAY, then start a circuit here.</div>}
-              {lvl3Pool.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:14}}>Pool: {lvl3Pool.length} exercises across {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size} videos</div>}
+              {lvl3Pool.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:14}}>Pool: {lvl3Pool.length} {lvl3Pool.length===1?"exercise":"exercises"} across {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size} {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size===1?"video":"videos"}</div>}
 
               <div className="section-label">Past Sessions</div>
               {lvl3Sessions.length===0&&<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:11}}>No sessions yet.</div>}
@@ -2843,7 +2907,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
                       <div style={{fontFamily:"Bebas Neue",fontSize:16,color:"var(--accent)",letterSpacing:1}}>{date}</div>
-                      <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{s.entries.length} exercises · {done} logged</div>
+                      <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{s.entries.length} {s.entries.length===1?"exercise":"exercises"} · {done} logged</div>
                     </div>
                     <button onClick={e=>{e.stopPropagation();deleteLvl3Session(s.id);}} className="vid-card-btn danger" title="Delete">✕</button>
                   </div>
