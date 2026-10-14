@@ -416,14 +416,28 @@ const GYM_ONLY_EXPLICIT=new Set([
   "Assisted Dip (Narrow Grip)","Assisted Dip (Wide Grip)","Assisted Dip (Neutral Grip)",
   "Rope Pushdown","Straight-Bar Pushdown","V-Bar Pushdown",
   "Hyperextension","Reverse Hyperextension","Glute-Ham Raise",
-  // Pull-up variants (hotel/home may not have a bar)
-  "Pull-Ups","Chin-Ups","Wide-Grip Pull-Ups","Close-Grip Pull-Ups","Neutral-Grip Pull-Ups","Mixed-Grip Pull-Ups",
-  "Chest Dips","Tricep Dips","Bench Dips",
   "Battle Ropes",
+  // Barbell items — a hotel/home user told "no free barbells" should not see these:
+  "Barbell Bench Press","Barbell Incline Bench Press","Barbell Decline Bench Press",
+  "Barbell Row","Barbell Deadlift","Barbell Overhead Press","Barbell Upright Row",
+  "Barbell Curl","Barbell Preacher Curl","EZ-Bar Curl","Reverse Barbell Curl","EZ-Bar Preacher Curl",
+  "Barbell Wrist Curl","Barbell Reverse Wrist Curl",
+  "Barbell Squat","Barbell Romanian Deadlift","Barbell Lunge",
+  "Close-Grip Bench Press",
+  // Captain's Chair station + hanging leg bar typically not at home/hotel
+  "Captain's Chair Leg Raise","Hanging Leg Raises","Hanging Knee Raises",
+  "Standing Leg Curl","Hyperextension",
+  // NOTE: Pull-Ups/Chin-Ups, Chest Dips/Tricep Dips, and Bench Dips are intentionally NOT excluded here.
+  // A doorway pull-up bar costs $20 and many home gyms have one. Bench Dips need only a bench or chair.
+  // Users who truly can't do them can mark 🚫 unavailable to drop them individually.
 ]);
-// Cardio machines that aren't portable/available at home or basic hotel gyms.
-const CARDIO_MACHINE_EXERCISES=new Set([
+// Cardio machines excluded by gym type. Hotels usually have at least a treadmill, so hotel-basic keeps that.
+const CARDIO_MACHINE_EXERCISES_HOME=new Set([
   "Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg",
+]);
+const CARDIO_MACHINE_EXERCISES_HOTEL=new Set([
+  // Hotel keeps Treadmill (and Elliptical which is also common at hotels), excludes the specialty rest.
+  "Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike",
 ]);
 // Build the set of exercises excluded from the AI's "suggest from this list" based on gym type.
 function buildGymExclusionSet(gymType,library){
@@ -432,15 +446,14 @@ function buildGymExclusionSet(gymType,library){
   // Commercial gyms don't necessarily have PF-branded gear; exclude the 4 PF items from commercial too.
   if(g==="commercial"||g==="home"||g==="hotel-basic"){PF_SPECIFIC_EXERCISES.forEach(e=>exclude.add(e));}
   if(g==="planet-fitness"||g==="commercial")return exclude;
-  // Pattern + explicit matches for home/hotel
+  // Pattern + explicit matches for home/hotel. Cardio exclusion differs: home drops everything,
+  // hotel keeps Treadmill and Elliptical (common at hotel gyms).
+  const cardioExcl=g==="hotel-basic"?CARDIO_MACHINE_EXERCISES_HOTEL:CARDIO_MACHINE_EXERCISES_HOME;
   Object.values(library).forEach(group=>group.forEach(ex=>{
     if(/^Smith /.test(ex)||/\bCable\b/.test(ex)||/\bMachine$/.test(ex)||/\bMachine\b/.test(ex)||/^TRX /.test(ex))exclude.add(ex);
     if(GYM_ONLY_EXPLICIT.has(ex))exclude.add(ex);
-    if(CARDIO_MACHINE_EXERCISES.has(ex))exclude.add(ex);
+    if(cardioExcl.has(ex))exclude.add(ex);
   }));
-  // Hotel-basic is more restrictive: also drop treadmill-adjacent cardio that a hotel might not have (handled above),
-  // plus any heavier dumbbell-dependent compounds that assume a heavy bench + rack. For now the pattern list already catches
-  // the big items; the hotel vs home difference lives in the user's dumbbellMax field in the profile.
   return exclude;
 }
 const EXERCISE_LIBRARY={
@@ -1753,6 +1766,7 @@ function CardioEquipmentModal({selected,onSave,onClose,gymType}){
   const toggle=(eq)=>setChoices(prev=>prev.includes(eq)?prev.filter(e=>e!==eq):[...prev,eq]);
   // Equipment that typically doesn't live at a home or hotel gym. We still render all options, but
   // sort the likely-not-available ones to the bottom with a muted "unlikely at your gym" hint.
+  // Hotel keeps Treadmill and Elliptical as normal (very common at hotel gyms); home excludes everything.
   const UNLIKELY_AT_HOME=new Set(["Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]);
   const UNLIKELY_AT_HOTEL=new Set(["Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike"]);
   const unlikely=gymType==="home"?UNLIKELY_AT_HOME:gymType==="hotel-basic"?UNLIKELY_AT_HOTEL:new Set();
@@ -2134,6 +2148,21 @@ function GymTracker(){
   };
   const [selectedMuscle,setSelectedMuscle]=useState("Chest");
   const [selectedExercise,setSelectedExercise]=useState(getMergedLibrary()["Chest"][0]);
+  // Sync picker state with gym-type filtering. If the saved state points at an excluded
+  // exercise (e.g. "Smith Machine Bench Press" for a home user), auto-move it to the first
+  // allowed option in the current muscle group — otherwise ADD would silently insert an
+  // excluded exercise. Runs whenever the gym type or state changes.
+  useEffect(()=>{
+    const excl=buildGymExclusionSet(profile.gymType,getMergedLibrary());
+    const lib=getMergedLibrary();
+    const musclesAvail=Object.keys(lib).filter(m=>(lib[m]||[]).some(ex=>!excl.has(ex)));
+    if(!musclesAvail.length)return;
+    const effMuscle=musclesAvail.includes(selectedMuscle)?selectedMuscle:musclesAvail[0];
+    const exs=(lib[effMuscle]||[]).filter(ex=>!excl.has(ex));
+    const effExercise=exs.includes(selectedExercise)?selectedExercise:(exs[0]||"");
+    if(effMuscle!==selectedMuscle)setSelectedMuscle(effMuscle);
+    if(effExercise!==selectedExercise)setSelectedExercise(effExercise);
+  },[profile.gymType,selectedMuscle,selectedExercise]);
   const [note,setNote]=useState(_draft?.note||"");
   const [aiPlan,setAiPlan]=useState(null);
   const [aiLoading,setAiLoading]=useState(false);
@@ -2159,14 +2188,24 @@ function GymTracker(){
   const apiHeaders=()=>({"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
   const addExercise=()=>{
-    const isUni=isUnilateralExercise(selectedExercise);
-    const isCardio=selectedMuscle==="Cardio";
-    const isTimed=TIMED_EXERCISES.has(selectedExercise);
-    const isRung=RUNG_EXERCISES.has(selectedExercise);
-    const isLevel=LEVEL_EXERCISES.has(selectedExercise);
+    // Defensive: if selectedExercise is excluded for the current gym type (race between picker render
+    // and state), redirect to the first allowed exercise in the current muscle group.
+    let name=selectedExercise,muscle=selectedMuscle;
+    const excl=buildGymExclusionSet(profile.gymType,getMergedLibrary());
+    if(excl.has(name)){
+      const exs=(getMergedLibrary()[muscle]||[]).filter(ex=>!excl.has(ex));
+      if(!exs.length){window.alert("No exercises available for this muscle group with your gym type. Try a different group.");return;}
+      name=exs[0];
+      setSelectedExercise(name);
+    }
+    const isUni=isUnilateralExercise(name);
+    const isCardio=muscle==="Cardio";
+    const isTimed=TIMED_EXERCISES.has(name);
+    const isRung=RUNG_EXERCISES.has(name);
+    const isLevel=LEVEL_EXERCISES.has(name);
     const savedUrls=loadYoutubeUrls();
-    setExercises(prev=>[...prev,{id:generateId(),name:selectedExercise,muscle:selectedMuscle,
-      youtubeUrl:savedUrls[selectedExercise]||"",
+    setExercises(prev=>[...prev,{id:generateId(),name:name,muscle:muscle,
+      youtubeUrl:savedUrls[name]||"",
       sets:[isLevel?(isTimed?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""}):isRung?{id:generateId(),rung:"",duration:""}:isCardio?{id:generateId(),duration:"",resistance:""}:isTimed?{id:generateId(),duration:""}:isUni?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}:{id:generateId(),weight:"",reps:""}]}]);
     setScanResult(null);
   };
@@ -2284,6 +2323,10 @@ function GymTracker(){
       const lastMax=getLastSessionMaxWeight(ex.name,history);
       if(lastMax>0&&Number(sw)<lastMax)sw=String(lastMax);
     }
+    // Sets start EMPTY. The AI's suggested weight/reps live only on aiWeight/aiReps and show as
+    // placeholder hints in the inputs. The user must type what they actually did. Previously the
+    // sets were prefilled with the AI numbers, which meant an untouched AI plan saved as completed
+    // work and corrupted progression.
     return{
       id:generateId(),name:ex.name||"Exercise",muscle:ex.muscle||"",
       aiWeight:sw,aiReps:sr,superset,supersetLabel,restSeconds,activeRest,youtubeUrl:savedUrls[ex.name]||ex.youtubeUrl||"",
@@ -2292,12 +2335,12 @@ function GymTracker(){
         :RUNG_EXERCISES.has(ex.name||"")
         ?{id:generateId(),rung:"",duration:""}
         :isAssist
-        ?{id:generateId(),assist:"",reps:sr}
+        ?{id:generateId(),assist:"",reps:""}
         :TIMED_EXERCISES.has(ex.name||"")
           ?{id:generateId(),duration:""}
           :isUni
-            ?{id:generateId(),weightL:sw,weightR:sw,repsL:sr,repsR:sr}
-            :{id:generateId(),weight:sw,reps:sr}
+            ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
+            :{id:generateId(),weight:"",reps:""}
       )
     };
     }catch(e){console.error("parseEx error:",e,ex);return{id:generateId(),name:ex?.name||"Exercise",muscle:ex?.muscle||"",sets:[{id:generateId(),weight:"",reps:""}],aiWeight:"",aiReps:"",superset,supersetLabel,restSeconds,activeRest,youtubeUrl:""};}
@@ -2733,21 +2776,20 @@ Respond ONLY with valid JSON in this exact format (no other text):
                   </div>
                 )}
                 {(()=>{
-                  // Filter picker by gym type — same exclusion set the AI uses, applied to muscle groups + exercises.
+                  // Picker uses gym-filtered library. State is kept in sync by the useEffect above,
+                  // so by the time the user taps ADD, selectedMuscle/selectedExercise are already valid.
                   const _gymExcl=buildGymExclusionSet(profile.gymType,getMergedLibrary());
                   const _pickerLib=Object.fromEntries(Object.entries(getMergedLibrary()).map(([m,exs])=>[m,exs.filter(ex=>!_gymExcl.has(ex))]).filter(([m,exs])=>exs.length>0));
                   const _availableMuscles=MUSCLE_GROUPS.filter(m=>_pickerLib[m]&&_pickerLib[m].length>0);
-                  const _effMuscle=_availableMuscles.includes(selectedMuscle)?selectedMuscle:(_availableMuscles[0]||"Chest");
-                  const _exs=_pickerLib[_effMuscle]||[];
-                  const _effExercise=_exs.includes(selectedExercise)?selectedExercise:(_exs[0]||"");
+                  const _exs=_pickerLib[selectedMuscle]||[];
                   return(<>
                     <div className="row" style={{marginBottom:8}}>
-                      <select className="input" value={_effMuscle} onChange={e=>{const next=e.target.value;setSelectedMuscle(next);setSelectedExercise((_pickerLib[next]||[""])[0]);setScanResult(null);}}>
+                      <select className="input" value={_availableMuscles.includes(selectedMuscle)?selectedMuscle:(_availableMuscles[0]||"Chest")} onChange={e=>{const next=e.target.value;setSelectedMuscle(next);setSelectedExercise((_pickerLib[next]||[""])[0]);setScanResult(null);}}>
                         {_availableMuscles.map(m=><option key={m}>{m}</option>)}
                       </select>
                     </div>
                     <div className="row" style={{marginBottom:12}}>
-                      <select className="input" value={_effExercise} onChange={e=>{setSelectedExercise(e.target.value);setScanResult(null);}}>
+                      <select className="input" value={_exs.includes(selectedExercise)?selectedExercise:(_exs[0]||"")} onChange={e=>{setSelectedExercise(e.target.value);setScanResult(null);}}>
                         {_exs.map(ex=><option key={ex}>{ex}</option>)}
                       </select>
                       <button className="btn btn-accent" onClick={addExercise}>ADD</button>
