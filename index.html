@@ -206,7 +206,32 @@ function addToLibrary(muscle,name){
   if(!lib[muscle])lib[muscle]=[];
   if(!lib[muscle].includes(name)){lib[muscle].push(name);saveDynamicLibrary(lib);}
 }
-function loadDraftSession(){try{return JSON.parse(localStorage.getItem("ironlog:draft")||"null");}catch{return null;}}
+function loadDraftSession(){
+  try{
+    const d=JSON.parse(localStorage.getItem("ironlog:draft")||"null");
+    if(!d||!d.exercises||!d.loadedFromAI)return d;
+    // Migration: a pre-fix draft from an AI plan may have set values prefilled with the AI's weight/reps.
+    // Those should NOT survive restore as "done." Blank them out — the AI target still lives on aiWeight/aiReps.
+    // We detect a pre-fix draft by its savedAt timestamp (anything saved before migration cutoff).
+    const CUTOFF=new Date("2026-10-14T10:00:00-07:00").getTime();
+    if(d.savedAt&&d.savedAt>=CUTOFF)return d;
+    const scrubbed={...d,exercises:d.exercises.map(ex=>{
+      // Only scrub if aiWeight/aiReps is present (so we know these came from the AI, not the user)
+      if(!ex.aiWeight&&!ex.aiReps)return ex;
+      return{...ex,sets:(ex.sets||[]).map(s=>{
+        const next={...s};
+        if(next.weight===ex.aiWeight)next.weight="";
+        if(next.reps===ex.aiReps)next.reps="";
+        if(next.weightL===ex.aiWeight)next.weightL="";
+        if(next.weightR===ex.aiWeight)next.weightR="";
+        if(next.repsL===ex.aiReps)next.repsL="";
+        if(next.repsR===ex.aiReps)next.repsR="";
+        return next;
+      })};
+    })};
+    return scrubbed;
+  }catch{return null;}
+}
 function saveDraftSession(exercises,note,loadedFromAI){try{localStorage.setItem("ironlog:draft",JSON.stringify({exercises,note,loadedFromAI,savedAt:Date.now()}));}catch(e){}}
 function clearDraftSession(){try{localStorage.removeItem("ironlog:draft");}catch(e){}}
 // Session timing (LVL1/LVL2) — persisted separately from draft so it survives reloads during a workout.
@@ -224,7 +249,19 @@ function loadBodyweight(){return parseFloat(localStorage.getItem("ironlog:bodywe
 function saveBodyweight(w){try{localStorage.setItem("ironlog:bodyweight",String(w));}catch(e){}}
 function loadIntensityLevel(){return parseInt(localStorage.getItem("ironlog:intensity")||"1");}
 function saveIntensityLevel(l){try{localStorage.setItem("ironlog:intensity",String(l));}catch(e){}}
-function loadCardioEquipment(){try{const s=localStorage.getItem("ironlog:cardio");return s?JSON.parse(s):["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];}catch{return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];}}
+function loadCardioEquipment(){
+  try{
+    const s=localStorage.getItem("ironlog:cardio");
+    if(s)return JSON.parse(s);
+    // No stored selection yet — default based on the user's gym type so a home user doesn't start out
+    // with Stair Climber / Elliptical / Recumbent Bike checked by default.
+    let gymType="commercial";
+    try{const p=JSON.parse(localStorage.getItem("ironlog:profile")||"null");if(p&&p.gymType)gymType=p.gymType;}catch(e){}
+    if(gymType==="home")return["Jump Rope"];
+    if(gymType==="hotel-basic")return["Treadmill","Elliptical","Jump Rope"];
+    return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];
+  }catch{return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];}
+}
 function saveCardioEquipment(list){try{localStorage.setItem("ironlog:cardio",JSON.stringify(list));}catch(e){}}
 function loadUnavailableExercises(){try{return JSON.parse(localStorage.getItem("ironlog:unavailable")||"[]");}catch{return[];}}
 function toggleUnavailableExercise(name){
@@ -424,16 +461,19 @@ const GYM_ONLY_EXPLICIT=new Set([
   "Barbell Wrist Curl","Barbell Reverse Wrist Curl",
   "Barbell Squat","Barbell Romanian Deadlift","Barbell Lunge",
   "Close-Grip Bench Press",
-  // Captain's Chair station + hanging leg bar typically not at home/hotel
-  "Captain's Chair Leg Raise","Hanging Leg Raises","Hanging Knee Raises",
+  // Captain's Chair station typically not at home/hotel. Hanging Leg/Knee Raises need only a pull-up bar
+  // (which we're already assuming for home/hotel users since Pull-Ups are kept), so those stay in.
+  "Captain's Chair Leg Raise",
   "Standing Leg Curl","Hyperextension",
   // NOTE: Pull-Ups/Chin-Ups, Chest Dips/Tricep Dips, and Bench Dips are intentionally NOT excluded here.
   // A doorway pull-up bar costs $20 and many home gyms have one. Bench Dips need only a bench or chair.
   // Users who truly can't do them can mark 🚫 unavailable to drop them individually.
 ]);
 // Cardio machines excluded by gym type. Hotels usually have at least a treadmill, so hotel-basic keeps that.
+// Both naming forms ("Bike" and "Stationary Bike") are included so the library's "Bike" and the picker's
+// "Stationary Bike" are both caught.
 const CARDIO_MACHINE_EXERCISES_HOME=new Set([
-  "Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg",
+  "Treadmill","Bike","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Bike Sprint",
 ]);
 const CARDIO_MACHINE_EXERCISES_HOTEL=new Set([
   // Hotel keeps Treadmill (and Elliptical which is also common at hotels), excludes the specialty rest.
@@ -1118,7 +1158,10 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
   );
 }
 
-function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0}){
+function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0,aiWeight="",aiReps=""}){
+  // Compute placeholder hints from AI target so empty-field prompts show the target instead of "lbs"/"reps".
+  const wPH=aiWeight?`${aiWeight} lb`:"lbs";
+  const rPH=aiReps?`${aiReps} reps`:"reps";
   if(isLevel)return(
     <div className="set-row">
       <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.level||""} onChange={e=>onChange({...set,level:e.target.value})} style={{maxWidth:70}}/>
@@ -1160,16 +1203,16 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       <div className="set-row">
         <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent)",width:20,fontWeight:600,textAlign:"center"}}>L</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder="lbs" value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder="reps" value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})}/>
         <button className="btn btn-danger" onClick={onRemove} style={{visibility:"hidden"}}>✕</button>
       </div>
       <div className="set-row">
         <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",width:20,textAlign:"center"}}>R</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder="lbs" value={set.weightR||""} onChange={e=>onChange({...set,weightR:e.target.value})} style={belowR?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightR||""} onChange={e=>onChange({...set,weightR:e.target.value})} style={belowR?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder="reps" value={set.repsR||""} onChange={e=>onChange({...set,repsR:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsR||""} onChange={e=>onChange({...set,repsR:e.target.value})}/>
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
       {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
@@ -1205,7 +1248,7 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     <div className="set-row">
       <div className="set-input" style={{display:"flex",alignItems:"center",justifyContent:"center",color:"var(--muted)",fontSize:10,letterSpacing:1}}>BW</div>
       <span className="set-label">×</span>
-      <input className="set-input" type="number" inputMode="decimal" placeholder="reps" value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
+      <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
@@ -1213,9 +1256,9 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
   return(
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       <div className="set-row">
-        <input className="set-input" type="number" inputMode="decimal" placeholder="lbs" value={set.weight||""} onChange={e=>onChange({...set,weight:e.target.value})} style={belowLast?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weight||""} onChange={e=>onChange({...set,weight:e.target.value})} style={belowLast?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder="reps" value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
       {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
@@ -1295,7 +1338,36 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     :isUnilateral
     ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
     :{id:generateId(),weight:"",reps:""};
-  const addSet=()=>onChange({...exercise,sets:[...exercise.sets,blankSet()]});
+  // ADD SET copies the previous set's values (weight/reps/duration/etc). This saves typing in
+  // the common case: your next set is usually at the same weight as the last one. A fresh set
+  // (first set of the exercise) still starts blank.
+  const addSet=()=>{
+    const last=exercise.sets[exercise.sets.length-1];
+    if(!last)return onChange({...exercise,sets:[blankSet()]});
+    const copy={...last,id:generateId()};
+    onChange({...exercise,sets:[...exercise.sets,copy]});
+  };
+  // USE TARGET: fill every empty set from the AI's suggested weight/reps. Non-empty sets are untouched.
+  const applyAiTargetToEmptySets=()=>{
+    if(!exercise.aiWeight&&!exercise.aiReps)return;
+    const sw=exercise.aiWeight||"",sr=exercise.aiReps||"";
+    const nextSets=exercise.sets.map(s=>{
+      if(isUnilateral){
+        const isEmpty=!s.weightL&&!s.weightR&&!s.repsL&&!s.repsR;
+        if(!isEmpty)return s;
+        return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr};
+      }
+      if(isBodyweight||isAssisted){
+        if(s.reps)return s;
+        return{...s,reps:sr};
+      }
+      if(isCardio||isTimed||isRung||isLevel)return s; // not weight/reps; leave as-is
+      const isEmpty=!s.weight&&!s.reps;
+      if(!isEmpty)return s;
+      return{...s,weight:sw,reps:sr};
+    });
+    onChange({...exercise,sets:nextSets});
+  };
   const updateSet=(id,u)=>onChange({...exercise,sets:exercise.sets.map(s=>s.id===id?u:s)});
   const removeSet=(id)=>onChange({...exercise,sets:exercise.sets.filter(s=>s.id!==id)});
   const swapTo=(newEx)=>{
@@ -1378,21 +1450,27 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
         </div>
       )}
       {exercise.aiWeight&&(
-        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
-          AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,flex:1}}>
+            AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
+          </div>
+          <button onClick={applyAiTargetToEmptySets} style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:1,padding:"6px 10px",borderRadius:4,cursor:"pointer",minHeight:32}}>USE TARGET</button>
         </div>
       )}
       {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
-        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,marginTop:6,marginBottom:2}}>
-          AI TARGET: {exercise.aiReps} reps bodyweight
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,flex:1}}>
+            AI TARGET: {exercise.aiReps} reps bodyweight
+          </div>
+          <button onClick={applyAiTargetToEmptySets} style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:1,padding:"6px 10px",borderRadius:4,cursor:"pointer",minHeight:32}}>USE TARGET</button>
         </div>
       )}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginBottom:3}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}</div>
-            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
+            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} aiWeight={exercise.aiWeight||""} aiReps={exercise.aiReps||""} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
           </div>
         ))}
       </div>
@@ -2263,7 +2341,16 @@ function GymTracker(){
     // Count sets before and after cleaning so we can warn the user if any complete-looking rows were silently dropped.
     const beforeSetCount=exercises.reduce((s,ex)=>s+((ex.sets||[]).length),0);
     const beforeNonEmpty=exercises.reduce((s,ex)=>s+((ex.sets||[]).filter(st=>Object.keys(st).some(k=>k!=="id"&&st[k]!==undefined&&st[k]!=="")).length),0);
-    const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData)})).filter(ex=>ex.sets.length>0);
+    // For unilateral sets, zero out the empty side so HISTORY doesn't display R:–lb×–
+    const stripIncompleteSide=s=>{
+      const out={...s};
+      const Lcomplete=nz(out.weightL)&&nz(out.repsL);
+      const Rcomplete=nz(out.weightR)&&nz(out.repsR);
+      if(Lcomplete&&!Rcomplete){delete out.weightR;delete out.repsR;}
+      if(Rcomplete&&!Lcomplete){delete out.weightL;delete out.repsL;}
+      return out;
+    };
+    const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)})).filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
     // If the user had sets with partial data (e.g. weight typed but no reps), warn before dropping them silently.
