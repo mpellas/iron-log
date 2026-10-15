@@ -9,12 +9,22 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="90Strong"/>
   <title>90Strong</title>
+  <!-- Content-Security-Policy: restrict what the page can load. Only the pinned-SRI scripts, the Google
+       Fonts stylesheet + files, our own inline/eval'd React code, YouTube video embeds and thumbnails,
+       and the Anthropic API endpoint are allowed. 'unsafe-eval' is needed for @babel/standalone's JSX
+       transpile; 'unsafe-inline' is needed for the inline <script type="text/babel"> and inline styles. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://img.youtube.com https://i.ytimg.com; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://api.anthropic.com; manifest-src 'self';"/>
+  <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-size='15' font-weight='900' text-anchor='middle' fill='%23c6ff5a'%3E90%3C/text%3E%3C/svg%3E"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap"/>
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
+  <!-- Pinned CDN scripts with Subresource Integrity hashes. If unpkg ever serves modified bytes, the
+       browser refuses to execute them. Hashes verified against jsdelivr's registry SHA-256 for the
+       same npm tarballs. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js" integrity="sha384-ezQ6HS3FLspd9te19o2McUV6FAK091+GG7KO54f/R8DKgCDi7fULhapNrd5LY+vG" crossorigin="anonymous"></script>
   <style>
     html,body,#root{height:100%;margin:0;padding:0;background:#0a0a0a;}
     *{-webkit-tap-highlight-color:transparent;}
@@ -461,6 +471,9 @@ const GYM_ONLY_EXPLICIT=new Set([
   "Barbell Wrist Curl","Barbell Reverse Wrist Curl",
   "Barbell Squat","Barbell Romanian Deadlift","Barbell Lunge",
   "Close-Grip Bench Press",
+  // Ambiguous names that are typically barbell lifts — exclude for home/hotel so the AI doesn't default to them.
+  // Users with dumbbells can log the dumbbell version as a custom entry.
+  "Sumo Deadlift","Romanian Deadlift","Sumo Deadlift High Pull","Skull Crushers",
   // Captain's Chair station typically not at home/hotel. Hanging Leg/Knee Raises need only a pull-up bar
   // (which we're already assuming for home/hotel users since Pull-Ups are kept), so those stay in.
   "Captain's Chair Leg Raise",
@@ -822,7 +835,7 @@ const css=`
   .logo{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--accent);line-height:1;}
   .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
-  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:36px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
+  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
   .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
@@ -1347,24 +1360,29 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     const copy={...last,id:generateId()};
     onChange({...exercise,sets:[...exercise.sets,copy]});
   };
-  // USE TARGET: fill every empty set from the AI's suggested weight/reps. Non-empty sets are untouched.
-  const applyAiTargetToEmptySets=()=>{
+  // MARK SET DONE: fill ONLY the first empty set with the AI's target. Tapping once after each
+  // set you complete gives natural per-set control. Sets you never do stay empty and are stripped on save.
+  // This prevents a user who did 2 of 3 sets from saving the 3rd as "done" at the AI target weight,
+  // which would falsely push progression up.
+  const markNextSetDone=()=>{
     if(!exercise.aiWeight&&!exercise.aiReps)return;
     const sw=exercise.aiWeight||"",sr=exercise.aiReps||"";
+    let marked=false;
     const nextSets=exercise.sets.map(s=>{
+      if(marked)return s;
       if(isUnilateral){
         const isEmpty=!s.weightL&&!s.weightR&&!s.repsL&&!s.repsR;
         if(!isEmpty)return s;
-        return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr};
+        marked=true;return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr};
       }
       if(isBodyweight||isAssisted){
         if(s.reps)return s;
-        return{...s,reps:sr};
+        marked=true;return{...s,reps:sr};
       }
-      if(isCardio||isTimed||isRung||isLevel)return s; // not weight/reps; leave as-is
+      if(isCardio||isTimed||isRung||isLevel)return s;
       const isEmpty=!s.weight&&!s.reps;
       if(!isEmpty)return s;
-      return{...s,weight:sw,reps:sr};
+      marked=true;return{...s,weight:sw,reps:sr};
     });
     onChange({...exercise,sets:nextSets});
   };
@@ -1451,19 +1469,19 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       )}
       {exercise.aiWeight&&(
         <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,flex:1}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--accent2)",letterSpacing:1,flex:1,lineHeight:1.3}}>
             AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
           </div>
-          <button onClick={applyAiTargetToEmptySets} style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:1,padding:"6px 10px",borderRadius:4,cursor:"pointer",minHeight:32}}>USE TARGET</button>
+          <button onClick={markNextSetDone} title="Fill the next empty set with the AI target — tap once per set you complete" style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:1,padding:"10px 14px",borderRadius:4,cursor:"pointer",minHeight:44,fontWeight:600}}>+ MARK DONE</button>
         </div>
       )}
       {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",letterSpacing:1,flex:1}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--accent2)",letterSpacing:1,flex:1,lineHeight:1.3}}>
             AI TARGET: {exercise.aiReps} reps bodyweight
           </div>
-          <button onClick={applyAiTargetToEmptySets} style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:1,padding:"6px 10px",borderRadius:4,cursor:"pointer",minHeight:32}}>USE TARGET</button>
+          <button onClick={markNextSetDone} title="Fill the next empty set with the AI target — tap once per set you complete" style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:1,padding:"10px 14px",borderRadius:4,cursor:"pointer",minHeight:44,fontWeight:600}}>+ MARK DONE</button>
         </div>
       )}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
@@ -1545,7 +1563,13 @@ function HistoryItem({entry,onDelete}){
                     });
                   } else if(isUni){
                     sets.filter(s=>s.weightL||s.weightR||s.repsL||s.repsR).forEach(s=>{
-                      chips.push(<span key={s.id} className="hist-set-chip">L:{s.weightL||"–"}lb×{s.repsL||"–"} R:{s.weightR||"–"}lb×{s.repsR||"–"}</span>);
+                      // Show only sides that have data. If strip-empty-side ran at save, one half may be absent.
+                      const hasL=s.weightL||s.repsL;
+                      const hasR=s.weightR||s.repsR;
+                      const parts=[];
+                      if(hasL)parts.push(`L:${s.weightL||"–"}lb×${s.repsL||"–"}`);
+                      if(hasR)parts.push(`R:${s.weightR||"–"}lb×${s.repsR||"–"}`);
+                      chips.push(<span key={s.id} className="hist-set-chip">{parts.join(" ")||"–"}</span>);
                     });
                   } else if(isRung){
                     sets.filter(s=>(s.rung!==undefined&&s.rung!=="")||s.duration).forEach(s=>{
@@ -2920,7 +2944,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
                   );
                 })}
                 <div style={{marginBottom:10}}><textarea className="note-input" rows={2} placeholder="Session notes (optional)..." value={note} onChange={e=>setNote(e.target.value)}/></div>
-                <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={saveWorkout}>SAVE WORKOUT</button>
+                <button className="btn btn-accent" style={{width:"100%",padding:16,minHeight:52,fontSize:14}} onClick={saveWorkout}>SAVE WORKOUT</button>
               </>
             )}
             {exercises.length===0&&!scanLoading&&!scanResult&&(
@@ -2932,8 +2956,8 @@ Respond ONLY with valid JSON in this exact format (no other text):
         {tab==="history"&&(
           <div className="section">
             <div className="stat-row">
-              <div className="stat-box"><div className="stat-val">{totalWorkouts}</div><div className="stat-lbl">Workouts</div></div>
-              <div className="stat-box"><div className="stat-val">{Object.keys(muscleCount).length}</div><div className="stat-lbl">Muscles</div></div>
+              <div className="stat-box"><div className="stat-val">{totalWorkouts}</div><div className="stat-lbl">{totalWorkouts===1?"Workout":"Workouts"}</div></div>
+              <div className="stat-box"><div className="stat-val">{Object.keys(muscleCount).length}</div><div className="stat-lbl">{Object.keys(muscleCount).length===1?"Muscle":"Muscles"}</div></div>
               <div className="stat-box"><div className="stat-val" style={{fontSize:16,paddingTop:6}}>{topMuscle}</div><div className="stat-lbl">Top Focus</div></div>
             </div>
             {history.length===0
@@ -3192,7 +3216,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="help-p"><b>LOG</b> — record your workouts one exercise at a time</div>
             <div className="help-p"><b>HISTORY</b> — every past session</div>
             <div className="help-p"><b>GAINS</b> — progression charts per exercise</div>
-            <div className="help-p"><b>AI REC</b> — If not in Level 3, an optional AI-generated workout tuned to your gym and profile (uses your own Anthropic API key)</div>
+            <div className="help-p"><b>AI REC</b> — optional AI-generated workout tuned to your gym and profile. Only visible in LVL1 and LVL2 modes. Uses your own Anthropic API key.</div>
             <div className="help-p"><b>PLAY</b> — a YouTube video library for workouts you follow along with</div>
             <div className="help-p"><b>LVL3</b> — circuit mode: build sessions by combining exercises across your videos, log as you flow through</div>
 
