@@ -261,12 +261,23 @@ function loadIntensityLevel(){return parseInt(localStorage.getItem("ironlog:inte
 function saveIntensityLevel(l){try{localStorage.setItem("ironlog:intensity",String(l));}catch(e){}}
 function loadCardioEquipment(){
   try{
-    const s=localStorage.getItem("ironlog:cardio");
-    if(s)return JSON.parse(s);
-    // No stored selection yet — default based on the user's gym type so a home user doesn't start out
-    // with Stair Climber / Elliptical / Recumbent Bike checked by default.
     let gymType="commercial";
     try{const p=JSON.parse(localStorage.getItem("ironlog:profile")||"null");if(p&&p.gymType)gymType=p.gymType;}catch(e){}
+    const s=localStorage.getItem("ironlog:cardio");
+    if(s){
+      const stored=JSON.parse(s);
+      // Prune items the current gym type can't have. Covers users who set up with Commercial, picked
+      // machines, then switched to Home or Hotel-basic — they shouldn't carry Arc Trainer into Home.
+      const impossible=gymType==="home"?["Treadmill","Stationary Bike","Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]
+        :gymType==="hotel-basic"?["Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike"]
+        :[];
+      const pruned=stored.filter(it=>!impossible.includes(it));
+      // If the prune emptied the list for a home user, give them Jump Rope as a safe default
+      if(!pruned.length&&gymType==="home")return["Jump Rope"];
+      if(!pruned.length&&gymType==="hotel-basic")return["Treadmill","Jump Rope"];
+      return pruned;
+    }
+    // No stored selection yet — default based on the user's gym type.
     if(gymType==="home")return["Jump Rope"];
     if(gymType==="hotel-basic")return["Treadmill","Elliptical","Jump Rope"];
     return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];
@@ -1173,8 +1184,14 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
 
 function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0,aiWeight="",aiReps=""}){
   // Compute placeholder hints from AI target so empty-field prompts show the target instead of "lbs"/"reps".
-  const wPH=aiWeight?`${aiWeight} lb`:"lbs";
-  const rPH=aiReps?`${aiReps} reps`:"reps";
+  // Prefix with "e.g." so the hint is clearly an example, not a logged value (reviewer item #5).
+  const wPH=aiWeight?`e.g. ${aiWeight}`:"lbs";
+  const rPH=aiReps?`e.g. ${aiReps}`:"reps";
+  // Pending copies (from ADD SET) show their values dimmed/italic as "not yet done" hints. Any typing or
+  // the MARK DONE button clears _pending (handled in updateSet / markNextSetDone), making them real values.
+  const pending=!!set._pending;
+  const pendingStyle=pending?{color:"var(--muted)",fontStyle:"italic",opacity:0.65}:undefined;
+  const mergeStyle=(base)=>base?(pendingStyle?{...pendingStyle,...base}:base):pendingStyle;
   if(isLevel)return(
     <div className="set-row">
       <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.level||""} onChange={e=>onChange({...set,level:e.target.value})} style={{maxWidth:70}}/>
@@ -1216,16 +1233,16 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       <div className="set-row">
         <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent)",width:20,fontWeight:600,textAlign:"center"}}>L</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={mergeStyle(belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})} style={mergeStyle(null)}/>
         <button className="btn btn-danger" onClick={onRemove} style={{visibility:"hidden"}}>✕</button>
       </div>
       <div className="set-row">
         <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",width:20,textAlign:"center"}}>R</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightR||""} onChange={e=>onChange({...set,weightR:e.target.value})} style={belowR?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightR||""} onChange={e=>onChange({...set,weightR:e.target.value})} style={mergeStyle(belowR?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsR||""} onChange={e=>onChange({...set,repsR:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsR||""} onChange={e=>onChange({...set,repsR:e.target.value})} style={mergeStyle(null)}/>
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
       {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
@@ -1269,9 +1286,9 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
   return(
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       <div className="set-row">
-        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weight||""} onChange={e=>onChange({...set,weight:e.target.value})} style={belowLast?{borderColor:"#e8a13a",color:"#e8a13a"}:undefined}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weight||""} onChange={e=>onChange({...set,weight:e.target.value})} style={mergeStyle(belowLast?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
-        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
+        <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})} style={mergeStyle(null)}/>
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
       {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
@@ -1351,13 +1368,18 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     :isUnilateral
     ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
     :{id:generateId(),weight:"",reps:""};
-  // ADD SET copies the previous set's values (weight/reps/duration/etc). This saves typing in
-  // the common case: your next set is usually at the same weight as the last one. A fresh set
-  // (first set of the exercise) still starts blank.
+  // ADD SET copies the previous set's values AND marks the copy with _pending.
+  // Pending copies display their values dimmed (as hints) and are dropped on save unless the
+  // user explicitly interacts with any field (which clears _pending in updateSet). This prevents
+  // "I added a set I never did" from saving as completed work and inflating progression.
+  // If the last set is empty, we don't add another empty row (reviewer item #6).
   const addSet=()=>{
     const last=exercise.sets[exercise.sets.length-1];
     if(!last)return onChange({...exercise,sets:[blankSet()]});
-    const copy={...last,id:generateId()};
+    // Check if last set has any data to copy. If it's empty, don't add another empty duplicate.
+    const lastHasData=Object.keys(last).some(k=>k!=="id"&&k!=="_pending"&&last[k]!==undefined&&last[k]!=="");
+    if(!lastHasData)return; // reviewer #6: don't duplicate a blank row
+    const copy={...last,id:generateId(),_pending:true};
     onChange({...exercise,sets:[...exercise.sets,copy]});
   };
   // MARK SET DONE: fill ONLY the first empty set with the AI's target. Tapping once after each
@@ -1367,26 +1389,27 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
   const markNextSetDone=()=>{
     if(!exercise.aiWeight&&!exercise.aiReps)return;
     const sw=exercise.aiWeight||"",sr=exercise.aiReps||"";
+    // Only fill the first set that is BOTH empty of user data AND not already marked done.
+    // A _pending set (from ADD SET copy) counts as "fillable" since the user hasn't touched it.
+    const isEmpty=s=>{
+      if(s._pending)return true;
+      if(isUnilateral)return !s.weightL&&!s.weightR&&!s.repsL&&!s.repsR;
+      if(isBodyweight||isAssisted)return !s.reps;
+      return !s.weight&&!s.reps;
+    };
     let marked=false;
     const nextSets=exercise.sets.map(s=>{
       if(marked)return s;
-      if(isUnilateral){
-        const isEmpty=!s.weightL&&!s.weightR&&!s.repsL&&!s.repsR;
-        if(!isEmpty)return s;
-        marked=true;return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr};
-      }
-      if(isBodyweight||isAssisted){
-        if(s.reps)return s;
-        marked=true;return{...s,reps:sr};
-      }
-      if(isCardio||isTimed||isRung||isLevel)return s;
-      const isEmpty=!s.weight&&!s.reps;
-      if(!isEmpty)return s;
-      marked=true;return{...s,weight:sw,reps:sr};
+      if(!isEmpty(s))return s;
+      if(isCardio||isTimed||isRung||isLevel)return s; // not applicable to these set types
+      marked=true;
+      if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
+      if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
+      return{...s,weight:sw,reps:sr,_pending:false};
     });
     onChange({...exercise,sets:nextSets});
   };
-  const updateSet=(id,u)=>onChange({...exercise,sets:exercise.sets.map(s=>s.id===id?u:s)});
+  const updateSet=(id,u)=>onChange({...exercise,sets:exercise.sets.map(s=>s.id===id?{...u,_pending:false}:s)});
   const removeSet=(id)=>onChange({...exercise,sets:exercise.sets.filter(s=>s.id!==id)});
   const swapTo=(newEx)=>{
     const isNowUni=isUnilateralExercise(newEx);
@@ -1436,8 +1459,8 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
   const isValidYt=isSafeYoutubeUrl(ytUrl);
   return(
     <div className="exercise-card">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
-        <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2,gap:8,flexWrap:"wrap"}}>
+        <div style={{flex:"1 1 180px",minWidth:0}}>
           <div className="exercise-name">{exercise.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <div className="exercise-meta">{exercise.muscle}{isCardio?(CARDIO_EXERCISES.has(exercise.name)?" · duration + calories":" · duration + level + calories"):""}</div>
@@ -1448,7 +1471,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
             {exerciseTiming&&exerciseTiming.start&&<span className="exercise-time-badge">⏱ {formatDuration(Math.max(0,Math.round(((exerciseTiming.end||Date.now())-exerciseTiming.start)/1000)))}</span>}
           </div>
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:1,flexWrap:"wrap",justifyContent:"flex-end"}}>
           <button onClick={onMoveUp} disabled={!canMoveUp} title="Move up" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveUp?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveUp?"var(--accent)":"var(--muted)",opacity:canMoveUp?1:0.4,padding:"12px 10px",minWidth:44,minHeight:44}}>↑</button>
           <button onClick={onMoveDown} disabled={!canMoveDown} title="Move down" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:5,cursor:canMoveDown?"pointer":"default",fontSize:13,lineHeight:1,fontWeight:700,color:canMoveDown?"var(--accent)":"var(--muted)",opacity:canMoveDown?1:0.4,padding:"12px 10px",minWidth:44,minHeight:44}}>↓</button>
           <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚫</button>
@@ -1475,7 +1498,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           <button onClick={markNextSetDone} title="Fill the next empty set with the AI target — tap once per set you complete" style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:1,padding:"10px 14px",borderRadius:4,cursor:"pointer",minHeight:44,fontWeight:600}}>+ MARK DONE</button>
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>`L${s.L}×${s.rL}/R${s.R}×${s.rR}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
           <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--accent2)",letterSpacing:1,flex:1,lineHeight:1.3}}>
@@ -1487,7 +1510,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginBottom:3}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:3,letterSpacing:1}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}{set._pending&&<span style={{color:"var(--accent2)",marginLeft:8,fontSize:10,fontStyle:"italic"}}>· copied — type or MARK DONE to confirm</span>}</div>
             <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} aiWeight={exercise.aiWeight||""} aiReps={exercise.aiReps||""} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
           </div>
         ))}
@@ -2345,6 +2368,8 @@ function GymTracker(){
     // Rung "0" and Level "0" still count as valid picks since 0 is a legitimate dial setting on some machines.
     const nz=v=>v!==undefined&&v!==null&&v!==""&&Number(v)!==0;
     const hasAnyData=s=>{
+      // Pending copies from ADD SET — user hasn't touched them, so they don't count as logged work.
+      if(s._pending)return false;
       // weighted: both weight and reps
       if(nz(s.weight)&&nz(s.reps))return true;
       // unilateral: at least one complete side
@@ -3268,6 +3293,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">Special Equipment</div>
             <div className="help-p"><b>TRX straps</b> log as bodyweight × reps. Progress by walking your feet forward for a harder angle.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:4,marginBottom:8,fontStyle:"italic"}}>The three items below are Planet Fitness-specific. Skip them unless your gym has them.</div>
             <div className="help-p"><b>PF360 rig</b> (Pushup + Climber) logs as rung × seconds. <i>Lower rung = harder.</i></div>
             <div className="help-p"><b>Elevate Core machine</b> logs as level (1–7) × seconds (Dynamic Plank) or level × reps (Scrunch). Higher level = harder.</div>
             <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
