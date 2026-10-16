@@ -129,19 +129,32 @@ const DEFAULT_PROFILE={
   inclinePreference:false,  // if true, AI defaults bench to incline
   compoundIncrement:5,      // lb to add when all reps completed
   isolationIncrement:2.5,   // lb to add when all reps completed
+  sessionTimeBudget:0,      // minutes; 0 = no cap, AI programs normally
+  bodyweight:0,             // lb; mirrored to ironlog:bodyweight so header BW button stays in sync
   notes:""                  // freeform additional context for the AI
 };
 function loadProfile(){
   try{
     const stored=JSON.parse(localStorage.getItem("ironlog:profile")||"null");
-    if(!stored)return DEFAULT_PROFILE;
+    if(!stored){
+      // No profile yet — seed bodyweight from the standalone BW key if the header button was used first.
+      return {...DEFAULT_PROFILE,bodyweight:loadBodyweight()||0};
+    }
     // Back-compat: profiles saved before gymType existed assumed Planet Fitness. Preserve that for upgrade users.
     const merged={...DEFAULT_PROFILE,...stored};
     if(!stored.gymType)merged.gymType="planet-fitness";
+    // Back-compat: profiles saved before bodyweight existed — fall back to the standalone BW key.
+    if(stored.bodyweight===undefined)merged.bodyweight=loadBodyweight()||0;
     return merged;
   }catch{return DEFAULT_PROFILE;}
 }
-function saveProfile(p){try{localStorage.setItem("ironlog:profile",JSON.stringify(p));}catch(e){}}
+function saveProfile(p){
+  try{
+    localStorage.setItem("ironlog:profile",JSON.stringify(p));
+    // Mirror bodyweight to the standalone key so the header BW button and assisted-machine math see it.
+    if(typeof p.bodyweight==="number"&&p.bodyweight>0)saveBodyweight(p.bodyweight);
+  }catch(e){}
+}
 // Build the USER CONTEXT paragraph in the AI prompt from the profile. Only emits lines for non-default values,
 // so a neutral profile produces no quirks and the AI programs generically.
 function buildUserContextFromProfile(p){
@@ -183,6 +196,10 @@ function buildUserContextFromProfile(p){
     lines.push("- ALWAYS include at least one forearm or grip exercise in the FINISHER (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, Zottman Curl). Place grip work at END only — never in supersets that would pre-fatigue grip for main lifts.");
   } else if(p.gripStrength==="strong"){
     lines.push("- Grip is strong; no special grip finisher required.");
+  }
+  const budget=parseInt(p.sessionTimeBudget||0)||0;
+  if(budget>0){
+    lines.push(`- TIME BUDGET: user has ~${budget} minutes for the whole session (warm-up to finisher). Size the plan to fit: fewer superset pairs if budget is tight (3 pairs for <30 min, 4 for 30-45 min, 5 for 45+ min), and shorten the finisher to ${budget<30?"3":"4"} exercises if the budget is under 45 min. Keep rest periods tight.`);
   }
   if((p.notes||"").trim())lines.push(`- ADDITIONAL USER NOTES: ${p.notes.trim()}`);
   return lines.join("\n");
@@ -844,15 +861,15 @@ const css=`
   .header{padding:24px 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10;}
   .header-top{display:flex;align-items:center;gap:5px;margin-bottom:4px;flex-wrap:wrap;}
   .logo{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--accent);line-height:1;}
-  .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
-  .date-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+  .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
+  .date-badge{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px;}
   .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
-  .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
+  .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
   .content{padding:20px;}
-  .section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
+  .section-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
   .help-p{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.65;color:var(--text);margin:0 0 14px 0;}
   .help-p b{color:var(--accent);font-weight:normal;}
   .help-p code{background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent2);font-size:11px;}
@@ -868,35 +885,38 @@ const css=`
   .btn-accent:disabled{opacity:0.4;cursor:not-allowed;}
   .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}
   .btn-ghost:hover{border-color:var(--text);color:var(--text);}
-  .btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:12px 14px;font-size:11px;min-height:44px;min-width:44px;}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid transparent;padding:12px 14px;font-size:12px;min-height:44px;min-width:44px;}
   .btn-danger:hover{border-color:var(--danger);}
+  .btn-check{background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:10px 10px;font-size:16px;font-weight:700;min-height:44px;min-width:44px;cursor:pointer;line-height:1;transition:all 0.12s;flex-shrink:0;}
+  .btn-check:hover{background:rgba(200,241,53,0.12);}
+  .btn-check:active{background:var(--accent);color:#0a0a0a;}
   .scan-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:var(--surface);border:1px dashed var(--accent);border-radius:6px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;}
   .scan-btn:hover{background:rgba(200,241,53,0.06);}
   .scan-result{background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;}
   .scan-result-icon{font-size:20px;flex-shrink:0;margin-top:2px;}
   .scan-result-body{flex:1;}
-  .scan-result-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:4px;}
+  .scan-result-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:4px;}
   .scan-result-text{font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);line-height:1.4;}
-  .scan-result-sub{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:4px;}
+  .scan-result-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:4px;}
   .scan-dismiss{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;flex-shrink:0;}
   .scan-loading{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;}
   .scan-spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
   @keyframes spin{to{transform:rotate(360deg);}}
-  .scan-loading-text{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--muted);}
+  .scan-loading-text{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;color:var(--muted);}
   .exercise-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;}
   .exercise-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text);margin-bottom:2px;}
-  .exercise-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);margin-bottom:4px;}
+  .exercise-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:4px;}
   .set-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
   .set-input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 6px;font-family:'IBM Plex Mono',monospace;font-size:14px;border-radius:4px;outline:none;text-align:center;min-height:44px;box-sizing:border-box;}
   .set-input:focus{border-color:var(--accent);}
-  .set-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);width:30px;text-align:center;}
-  .btn-add-set{font-size:11px;padding:12px 14px;background:var(--surface2);border:1px dashed var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
+  .set-label{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);width:30px;text-align:center;}
+  .btn-add-set{font-size:12px;padding:12px 14px;background:var(--surface2);border:1px dashed var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
   .btn-add-set:hover{border-color:var(--accent);color:var(--accent);}
   .divider{border:none;border-top:1px solid var(--border);margin:20px 0;}
-  .btn-swap{font-size:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
+  .btn-swap{font-size:12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;transition:all 0.15s;min-height:44px;}
   .btn-swap:hover{border-color:var(--accent2);color:var(--accent2);}
   .swap-drawer{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:10px;}
-  .swap-drawer-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+  .swap-drawer-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
   .swap-option{display:block;width:100%;text-align:left;padding:10px;background:none;border:1px solid transparent;border-radius:4px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;cursor:pointer;transition:all 0.12s;}
   .swap-option:hover{background:var(--surface);border-color:var(--border);color:var(--accent);}
   .swap-option.current{color:var(--muted);cursor:default;font-style:italic;}
@@ -904,14 +924,14 @@ const css=`
   .history-header{background:var(--surface);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;}
   .history-date{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;}
   .history-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;}
-  .tag{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--muted);text-transform:uppercase;}
+  .tag{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;padding:3px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--muted);text-transform:uppercase;}
   .history-body{padding:12px 16px;background:var(--bg);border-top:1px solid var(--border);}
   .hist-exercise{margin-bottom:10px;}
   .hist-name{font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--text);margin-bottom:4px;}
-  .hist-sets{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;}
+  .hist-sets{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;}
   .hist-set-chip{background:var(--surface2);padding:2px 8px;border-radius:3px;color:var(--accent);}
   .ai-panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;}
-  .ai-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--accent2);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .ai-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:3px;color:var(--accent2);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
   .ai-dot{width:6px;height:6px;border-radius:50%;background:var(--accent2);animation:pulse 1.5s infinite;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
   .ai-skeleton{display:flex;flex-direction:column;gap:8px;}
@@ -920,10 +940,10 @@ const css=`
   .plan-exercise{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:4px;}
   .plan-ex-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
   .plan-ex-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text);}
-  .plan-ex-muscle{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);}
-  .plan-ex-detail{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;}
+  .plan-ex-muscle{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);}
+  .plan-ex-detail{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);white-space:nowrap;}
   .plan-rationale{font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;line-height:1.4;}
-  .plan-focus{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent2);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+  .plan-focus{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent2);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
   .load-workout-btn{width:100%;padding:16px;background:var(--accent);color:#000;border:none;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;cursor:pointer;transition:all 0.15s;margin-top:8px;}
   .load-workout-btn:hover{background:#d4f74d;}
   .empty-state{text-align:center;padding:48px 20px;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;}
@@ -936,15 +956,15 @@ const css=`
   .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
   .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;}
   .stat-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);line-height:1;}
-  .stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
+  .stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
   .prog-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;}
   .prog-stat{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center;}
   .prog-stat-val{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--accent);line-height:1;}
-  .prog-stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:3px;}
+  .prog-stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:3px;}
   .chart-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;}
-  .chart-title{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
-  .prog-note{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-align:center;margin-top:8px;font-style:italic;}
-  .ai-badge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent2);text-transform:uppercase;background:rgba(255,92,53,0.08);border:1px solid rgba(255,92,53,0.25);border-radius:3px;padding:3px 7px;margin-bottom:14px;}
+  .chart-title{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
+  .prog-note{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);text-align:center;margin-top:8px;font-style:italic;}
+  .ai-badge{display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--accent2);text-transform:uppercase;background:rgba(255,92,53,0.08);border:1px solid rgba(255,92,53,0.25);border-radius:3px;padding:3px 7px;margin-bottom:14px;}
   .key-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;}
   /* PLAY: video library cards + mini/expanded player */
   .vid-card{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;}
@@ -952,26 +972,26 @@ const css=`
   .vid-card-thumb{width:80px;height:60px;border-radius:4px;background:var(--surface2) center/cover;flex-shrink:0;background-repeat:no-repeat;}
   .vid-card-body{flex:1;min-width:0;}
   .vid-card-name{font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .vid-card-note{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .vid-card-last{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vid-card-note{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vid-card-last{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .vid-card-actions{display:flex;gap:6px;flex-shrink:0;}
   .vid-card-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--accent);font-size:14px;padding:6px 10px;cursor:pointer;}
   .vid-card-btn.danger{color:var(--danger);}
   .vid-card-log{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px dashed var(--border);}
-  .vid-card-notes{padding:8px 0;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;}
+  .vid-card-notes{padding:8px 0;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.5;}
   .vid-card-notes-text{color:var(--text);white-space:pre-wrap;cursor:pointer;}
   .vid-card-notes-empty{color:var(--muted);cursor:pointer;font-style:italic;}
   .vid-card-notes textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px;line-height:1.4;resize:vertical;box-sizing:border-box;}
   .vid-card-notes-actions{display:flex;gap:6px;margin-top:6px;}
   .vid-exercises{padding:8px 0;border-top:1px solid var(--border);}
-  .vid-exercises-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;}
+  .vid-exercises-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;}
   .vid-ex-row{display:flex;align-items:center;padding:4px 6px;background:var(--surface2);border-radius:4px;margin-bottom:4px;gap:8px;}
-  .vid-ex-name{flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);word-break:break-word;}
+  .vid-ex-name{flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;}
   .vid-ex-remove{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 6px;flex-shrink:0;}
   .vid-ex-remove:hover{color:var(--danger);}
   .vid-ex-add{display:flex;gap:6px;margin-top:6px;align-items:center;}
   .vid-ex-add input{flex:1;min-width:0;}
-  .vid-tips{padding:8px 0 0;border-top:1px solid var(--border);margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.5;}
+  .vid-tips{padding:8px 0 0;border-top:1px solid var(--border);margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.5;}
   .vid-tips-text{color:var(--text);cursor:pointer;white-space:pre-wrap;}
   .vid-tips-empty{color:var(--muted);cursor:pointer;font-style:italic;}
   .vid-tips textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px;line-height:1.4;resize:vertical;box-sizing:border-box;}
@@ -982,10 +1002,10 @@ const css=`
   .lvl3-detail-row:last-child{border-bottom:none;}
   .lvl3-draft-row{display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:6px;gap:6px;}
   .lvl3-draft-name{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;}
-  .lvl3-draft-src{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;}
+  .lvl3-draft-src{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px;}
   .lvl3-pool-group{margin-bottom:14px;}
-  .lvl3-pool-src{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;padding-bottom:2px;border-bottom:1px solid var(--border);}
-  .lvl3-pool-item{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;text-align:left;}
+  .lvl3-pool-src{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;padding-bottom:2px;border-bottom:1px solid var(--border);}
+  .lvl3-pool-item{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:4px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;text-align:left;}
   .lvl3-pool-item:hover{background:var(--surface);border-color:var(--accent);}
   .lvl3-workout-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;}
   .lvl3-workout-row.done{border-color:var(--accent);opacity:0.75;}
@@ -993,19 +1013,19 @@ const css=`
   .lvl3-workout-inputs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .vid-card-log input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:8px 10px;width:70px;text-align:center;min-width:0;}
   .vid-card-log-sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:14px;padding:0 2px;}
-  .vid-card-log-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
-  .vid-card-log-btn{background:var(--surface2);border:1px solid var(--accent);border-radius:5px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;padding:9px 12px;margin-left:auto;cursor:pointer;text-transform:uppercase;flex-shrink:0;}
+  .vid-card-log-lbl{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .vid-card-log-btn{background:var(--surface2);border:1px solid var(--accent);border-radius:5px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;padding:9px 12px;margin-left:auto;cursor:pointer;text-transform:uppercase;flex-shrink:0;}
   .vid-card-log-btn:disabled{opacity:0.35;cursor:default;border-color:var(--border);color:var(--muted);}
   .vid-player{position:fixed;z-index:50;transition:all 0.2s ease;}
   .vid-player.mini{bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);height:76px;display:flex;align-items:center;padding:8px 10px;gap:10px;}
   .session-timer{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;}
-  .session-timer-start{width:100%;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;}
+  .session-timer-start{width:100%;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;}
   .session-timer-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
   .session-timer-stat{display:flex;flex-direction:column;align-items:flex-start;}
-  .session-timer-label{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);}
+  .session-timer-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);}
   .session-timer-value{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;line-height:1.1;}
   .session-timer-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
-  .session-timer-btn{padding:8px 12px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text);}
+  .session-timer-btn{padding:8px 12px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text);}
   .session-timer-btn.stop{border-color:var(--danger);color:var(--danger);}
   .session-timer-btn.rest{border-color:var(--accent2);color:var(--accent2);}
   .session-timer-btn.reset{border-color:var(--border);color:var(--muted);}
@@ -1013,21 +1033,21 @@ const css=`
   .session-rest-countdown{flex:1;font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent2);letter-spacing:1px;}
   .session-rest-done{margin-top:10px;padding:16px 12px;background:var(--accent);color:var(--bg);border-radius:6px;text-align:center;cursor:pointer;animation:rest-done-flash 0.4s ease-in-out;}
   @keyframes rest-done-flash{0%{transform:scale(0.95);opacity:0.3;}100%{transform:scale(1);opacity:1;}}
-  .exercise-time-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:2px;}
-  .history-duration{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:1px;margin-top:2px;}
+  .exercise-time-badge{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:1px;margin-top:2px;}
+  .history-duration{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);letter-spacing:1px;margin-top:2px;}
   .profile-field{margin-bottom:12px;}
   .profile-field-row{display:flex;gap:10px;}
-  .profile-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .profile-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
   .profile-input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:8px 10px;}
   .profile-input:focus{outline:none;border-color:var(--accent);}
-  .profile-check-row{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);}
+  .profile-check-row{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
   .profile-check-row input{width:16px;height:16px;cursor:pointer;}
-  .profile-section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:16px 0 10px;padding-top:12px;border-top:1px solid var(--border);}
+  .profile-section-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:16px 0 10px;padding-top:12px;border-top:1px solid var(--border);}
   .vid-player.mini .vid-frame-wrap{width:100px;height:60px;border-radius:4px;overflow:hidden;flex-shrink:0;pointer-events:none;}
   .vid-player.mini iframe{width:100px;height:60px;border:0;}
   .vid-player.mini .vid-info{flex:1;min-width:0;}
   .vid-player.mini .vid-title{font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .vid-player.mini .vid-status{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letterspacing:1px;margin-top:2px;}
+  .vid-player.mini .vid-status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letterspacing:1px;margin-top:2px;}
   .vid-player.mini .vid-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--accent);font-size:14px;padding:8px 10px;cursor:pointer;flex-shrink:0;}
   .vid-player.mini .vid-btn.close{color:var(--muted);}
   .vid-player.expanded{inset:0;background:rgba(0,0,0,0.96);display:flex;flex-direction:column;padding:16px 12px;position:fixed;}
@@ -1038,7 +1058,7 @@ const css=`
   .vid-player.expanded iframe{width:auto;height:100%;max-width:100%;max-height:100%;aspect-ratio:9/16;border:0;border-radius:8px;background:#000;}
   .vid-player.expanded .vid-info{padding:12px 4px 8px;color:var(--text);}
   .vid-player.expanded .vid-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--accent);}
-  .vid-player.expanded .vid-status{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:4px;}
+  .vid-player.expanded .vid-status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:1px;margin-top:4px;}
   .vid-player.expanded .vid-controls{display:flex;gap:8px;justify-content:center;padding-top:4px;}
   .vid-player.expanded .vid-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;padding:14px 18px;cursor:pointer;text-transform:uppercase;min-height:48px;}
   .vid-player.expanded .vid-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600;}
@@ -1050,7 +1070,7 @@ const css=`
   .key-modal-desc a{color:var(--accent);text-decoration:none;}
   .key-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px;font-family:'IBM Plex Mono',monospace;font-size:13px;border-radius:6px;outline:none;margin-bottom:12px;}
   .key-input:focus{border-color:var(--accent);}
-  .key-note{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:10px;line-height:1.5;}
+  .key-note{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:1px;margin-top:10px;line-height:1.5;}
 `;
 
 function ProfileModal({profile,onSave,onClose,onReset}){
@@ -1085,6 +1105,11 @@ function ProfileModal({profile,onSave,onClose,onReset}){
         <div className="profile-field">
           <label className="profile-label">Dumbbell max available (lb)</label>
           <input className="profile-input" type="number" inputMode="numeric" min="0" value={p.dumbbellMax} onChange={e=>upd("dumbbellMax",parseInt(e.target.value)||0)}/>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Bodyweight (lb) — used for assisted-machine math</label>
+          <input className="profile-input" type="number" inputMode="decimal" min="0" step="0.5" value={p.bodyweight||""} onChange={e=>upd("bodyweight",parseFloat(e.target.value)||0)} placeholder="e.g. 180"/>
         </div>
 
         <div className="profile-field">
@@ -1131,6 +1156,11 @@ function ProfileModal({profile,onSave,onClose,onReset}){
             <label className="profile-label">Isolation +lb when all reps hit</label>
             <input className="profile-input" type="number" inputMode="decimal" step="0.5" min="0" value={p.isolationIncrement} onChange={e=>upd("isolationIncrement",parseFloat(e.target.value)||0)}/>
           </div>
+        </div>
+
+        <div className="profile-field">
+          <label className="profile-label">Session time budget (minutes, 0 = no cap)</label>
+          <input className="profile-input" type="number" inputMode="numeric" min="0" step="5" value={p.sessionTimeBudget||0} onChange={e=>upd("sessionTimeBudget",parseInt(e.target.value)||0)} placeholder="e.g. 30 for busy days"/>
         </div>
 
         <div className="profile-field">
@@ -1182,47 +1212,55 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
   );
 }
 
-function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0,aiWeight="",aiReps=""}){
+function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=false,isUnilateral=false,isAssisted=false,isTimed=false,isRung=false,isLevel=false,noResistance=false,floor=0,aiWeight="",aiReps=""}){
   // Compute placeholder hints from AI target so empty-field prompts show the target instead of "lbs"/"reps".
-  // Prefix with "e.g." so the hint is clearly an example, not a logged value (reviewer item #5).
+  // Prefix with "e.g." so the hint is clearly an example, not a logged value.
   const wPH=aiWeight?`e.g. ${aiWeight}`:"lbs";
   const rPH=aiReps?`e.g. ${aiReps}`:"reps";
   // Pending copies (from ADD SET) show their values dimmed/italic as "not yet done" hints. Any typing or
-  // the MARK DONE button clears _pending (handled in updateSet / markNextSetDone), making them real values.
+  // the per-row ✓ button clears _pending (handled in updateSet / onConfirm), making them real values.
   const pending=!!set._pending;
   const pendingStyle=pending?{color:"var(--muted)",fontStyle:"italic",opacity:0.65}:undefined;
   const mergeStyle=(base)=>base?(pendingStyle?{...pendingStyle,...base}:base):pendingStyle;
+  // Per-row ✓: confirms THIS row only. If row has typed values, lock them in (clear _pending). If row is
+  // blank, fill from the AI target. Never touches another row. Styled green/dimmed by state.
+  const checkBtn=onConfirm?(
+    <button className="btn-check" onClick={onConfirm} title="Confirm this set (fills from AI target if blank, otherwise locks in what's typed)">✓</button>
+  ):null;
   if(isLevel)return(
     <div className="set-row">
       <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.level||""} onChange={e=>onChange({...set,level:e.target.value})} style={{maxWidth:70}}/>
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LEVEL 1-7</span>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>LEVEL 1-7</span>
       <span className="set-label">×</span>
       {isTimed
-        ?<><input className="set-input" type="number" inputMode="decimal" placeholder="sec" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/><span className="set-label" style={{fontSize:8,lineHeight:1.2}}>SEC</span></>
+        ?<><input className="set-input" type="number" inputMode="decimal" placeholder="sec" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/><span className="set-label" style={{fontSize:12,lineHeight:1.2}}>SEC</span></>
         :<input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>}
+      {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
   if(isRung)return(
     <div className="set-row">
       <input className="set-input" type="number" inputMode="numeric" placeholder="rung" value={set.rung||""} onChange={e=>onChange({...set,rung:e.target.value})} style={{maxWidth:70}}/>
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>RUNG 1-5</span>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>RUNG 1-5</span>
       <span className="set-label">×</span>
       <input className="set-input" type="number" inputMode="decimal" placeholder="sec" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/>
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>SEC</span>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>SEC</span>
+      {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
   if(isCardio)return(
     <div className="set-row" style={{flexWrap:"wrap",gap:6}}>
       <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{maxWidth:80}}/>
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>MIN</span>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>MIN</span>
       {!noResistance&&<>
         <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{maxWidth:70}}/>
-        <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>LEVEL</span>
+        <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>LEVEL</span>
       </>}
       <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{maxWidth:80}}/>
-      <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>CAL</span>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>CAL</span>
+      {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
@@ -1232,20 +1270,21 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     return(
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       <div className="set-row">
-        <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent)",width:20,fontWeight:600,textAlign:"center"}}>L</span>
+        <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",width:20,fontWeight:600,textAlign:"center"}}>L</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={mergeStyle(belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})} style={mergeStyle(null)}/>
         <button className="btn btn-danger" onClick={onRemove} style={{visibility:"hidden"}}>✕</button>
       </div>
       <div className="set-row">
-        <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",width:20,textAlign:"center"}}>R</span>
+        <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",width:20,textAlign:"center"}}>R</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightR||""} onChange={e=>onChange({...set,weightR:e.target.value})} style={mergeStyle(belowR?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsR||""} onChange={e=>onChange({...set,repsR:e.target.value})} style={mergeStyle(null)}/>
+        {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
+      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
     </div>
     );
   }
@@ -1256,6 +1295,7 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder="sec" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})}/>
         <span className="set-label">SEC</span>
+        {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
     );
@@ -1266,19 +1306,21 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
     return(
       <div className="set-row" style={{flexWrap:"wrap",gap:4}}>
         <input className="set-input" type="number" inputMode="decimal" placeholder="assist" value={set.assist||""} onChange={e=>onChange({...set,assist:e.target.value})} style={{maxWidth:70}}/>
-        <span className="set-label" style={{fontSize:8,lineHeight:1.2}}>ASSIST LB</span>
-        {actual!==null&&<span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent)",padding:"0 4px",alignSelf:"center"}}>={actual}lb lifted</span>}
+        <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>ASSIST LB</span>
+        {actual!==null&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",padding:"0 4px",alignSelf:"center"}}>={actual}lb lifted</span>}
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder="reps" value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
+        {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
     );
   }
   if(isBodyweight)return(
     <div className="set-row">
-      <div className="set-input" style={{display:"flex",alignItems:"center",justifyContent:"center",color:"var(--muted)",fontSize:10,letterSpacing:1}}>BW</div>
+      <div className="set-input" style={{display:"flex",alignItems:"center",justifyContent:"center",color:"var(--muted)",fontSize:12,letterSpacing:1}}>BW</div>
       <span className="set-label">×</span>
       <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})}/>
+      {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
@@ -1289,9 +1331,10 @@ function SetRow({set,onChange,onRemove,isCardio=false,isBodyweight=false,isUnila
         <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weight||""} onChange={e=>onChange({...set,weight:e.target.value})} style={mergeStyle(belowLast?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.reps||""} onChange={e=>onChange({...set,reps:e.target.value})} style={mergeStyle(null)}/>
+        {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
+      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
     </div>
   );
 }
@@ -1382,32 +1425,32 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     const copy={...last,id:generateId(),_pending:true};
     onChange({...exercise,sets:[...exercise.sets,copy]});
   };
-  // MARK SET DONE: fill ONLY the first empty set with the AI's target. Tapping once after each
-  // set you complete gives natural per-set control. Sets you never do stay empty and are stripped on save.
-  // This prevents a user who did 2 of 3 sets from saving the 3rd as "done" at the AI target weight,
-  // which would falsely push progression up.
-  const markNextSetDone=()=>{
-    if(!exercise.aiWeight&&!exercise.aiReps)return;
+  // Per-row ✓ confirm: locks THIS row only, never touches another.
+  // If the row has any typed values, strip _pending and keep what's there.
+  // If the row is completely blank, fill from the AI target (user asked for this shortcut).
+  // Never applies to cardio / timed / rung / level — those rows are confirmed by just typing in them.
+  const confirmSet=(id)=>{
     const sw=exercise.aiWeight||"",sr=exercise.aiReps||"";
-    // Only fill the first set that is BOTH empty of user data AND not already marked done.
-    // A _pending set (from ADD SET copy) counts as "fillable" since the user hasn't touched it.
-    const isEmpty=s=>{
-      if(s._pending)return true;
-      if(isUnilateral)return !s.weightL&&!s.weightR&&!s.repsL&&!s.repsR;
-      if(isBodyweight||isAssisted)return !s.reps;
-      return !s.weight&&!s.reps;
+    const hasAnyTyped=(s)=>{
+      if(isUnilateral)return !!(s.weightL||s.weightR||s.repsL||s.repsR);
+      if(isBodyweight||isAssisted)return !!(s.reps||s.assist);
+      if(isCardio)return !!(s.duration||s.resistance||s.calories);
+      if(isTimed||isRung)return !!(s.duration||s.rung);
+      if(isLevel)return !!(s.level||s.reps||s.duration);
+      return !!(s.weight||s.reps);
     };
-    let marked=false;
-    const nextSets=exercise.sets.map(s=>{
-      if(marked)return s;
-      if(!isEmpty(s))return s;
-      if(isCardio||isTimed||isRung||isLevel)return s; // not applicable to these set types
-      marked=true;
+    onChange({...exercise,sets:exercise.sets.map(s=>{
+      if(s.id!==id)return s;
+      // Already-typed values: just lock in by clearing pending.
+      if(hasAnyTyped(s))return{...s,_pending:false};
+      // Blank row + no AI target → nothing to fill, leave as-is.
+      if(!sw&&!sr)return s;
+      // Blank row + AI target → fill THIS row only.
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
+      if(isCardio||isTimed||isRung||isLevel)return s;
       return{...s,weight:sw,reps:sr,_pending:false};
-    });
-    onChange({...exercise,sets:nextSets});
+    })});
   };
   const updateSet=(id,u)=>onChange({...exercise,sets:exercise.sets.map(s=>s.id===id?{...u,_pending:false}:s)});
   const removeSet=(id)=>onChange({...exercise,sets:exercise.sets.filter(s=>s.id!==id)});
@@ -1491,27 +1534,25 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
         </div>
       )}
       {exercise.aiWeight&&(
-        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--accent2)",letterSpacing:1,flex:1,lineHeight:1.3}}>
-            AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps
+        <div style={{marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+            AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
           </div>
-          <button onClick={markNextSetDone} title="Fill the next empty set with the AI target — tap once per set you complete" style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:1,padding:"10px 14px",borderRadius:4,cursor:"pointer",minHeight:44,fontWeight:600}}>+ MARK DONE</button>
         </div>
       )}
       {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
-        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--accent2)",letterSpacing:1,flex:1,lineHeight:1.3}}>
-            AI TARGET: {exercise.aiReps} reps bodyweight
+        <div style={{marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+            AI TARGET: {exercise.aiReps} reps bodyweight · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
           </div>
-          <button onClick={markNextSetDone} title="Fill the next empty set with the AI target — tap once per set you complete" style={{background:"transparent",border:"1px solid var(--accent2)",color:"var(--accent2)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:1,padding:"10px 14px",borderRadius:4,cursor:"pointer",minHeight:44,fontWeight:600}}>+ MARK DONE</button>
         </div>
       )}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:3,letterSpacing:1}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}{set._pending&&<span style={{color:"var(--accent2)",marginLeft:8,fontSize:10,fontStyle:"italic"}}>· copied — type or MARK DONE to confirm</span>}</div>
-            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} aiWeight={exercise.aiWeight||""} aiReps={exercise.aiReps||""} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)}/>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:3,letterSpacing:1}}>{isCardio?`INTERVAL ${i+1}`:`SET ${i+1}`}{set._pending&&<span style={{color:"var(--accent2)",marginLeft:8,fontSize:12,fontStyle:"italic"}}>· copied — type or tap ✓ to confirm</span>}</div>
+            <SetRow set={set} isCardio={isCardio} isBodyweight={isBodyweight} isUnilateral={isUnilateral} isAssisted={isAssisted} isRung={isRung} isLevel={isLevel} isTimed={isTimed} floor={weightFloor} noResistance={CARDIO_EXERCISES.has(exercise.name)} aiWeight={exercise.aiWeight||""} aiReps={exercise.aiReps||""} onChange={u=>updateSet(set.id,u)} onRemove={()=>removeSet(set.id)} onConfirm={()=>confirmSet(set.id)}/>
           </div>
         ))}
       </div>
@@ -2341,7 +2382,14 @@ function GymTracker(){
 
   const handleSetBodyweight=()=>{
     const bw=window.prompt('Enter your bodyweight in lbs (for assisted machine calculations):',String(loadBodyweight()||''));
-    if(bw&&!isNaN(parseFloat(bw)))saveBodyweight(parseFloat(bw));
+    if(bw&&!isNaN(parseFloat(bw))){
+      const n=parseFloat(bw);
+      saveBodyweight(n);
+      // Keep profile.bodyweight in sync so the profile modal doesn't show a stale value.
+      const nextProfile={...profile,bodyweight:n};
+      saveProfile(nextProfile);
+      setProfile(nextProfile);
+    }
   };
   const updateExercise=(id,u)=>setExercises(prev=>prev.map(e=>e.id===id?u:e));
   const removeExercise=(id)=>setExercises(prev=>{
@@ -2642,9 +2690,24 @@ function GymTracker(){
       const trend=recent.map(s=>`${s.date}: ${s.totalSets}x${s.avgReps} @ ${s.maxWeight}lb`).join(" -> ");
       const isCompound=["press","row","squat","deadlift","lunge","pull","dip","chin"].some(k=>name.toLowerCase().includes(k));
       const increment=isCompound?(profile.compoundIncrement||5):(profile.isolationIncrement||2.5);
-      const suggested=latest.completedAllReps?latest.maxWeight+increment:latest.maxWeight;
-      const progressNote=latest.completedAllReps?"INCREASE — completed all reps":"HOLD — did not complete all reps";
-      return `${name} [MINIMUM WEIGHT: ${latest.maxWeight}lb — do NOT go below this]: ${trend} → ACTION: ${progressNote}, USE: ${suggested}lb`;
+      // Weights-can-go-down logic: if the user missed reps for 2+ consecutive sessions on this exercise,
+      // suggest a small deload (-5/-2.5 lb). One miss = hold. All reps = add. This replaces the old
+      // "never go below last weight" floor that trapped the user on a stuck weight indefinitely.
+      const missedCurrent=!latest.completedAllReps;
+      const prior=recent.length>=2?recent[recent.length-2]:null;
+      const missedPrior=prior&&!prior.completedAllReps;
+      let suggested,progressNote;
+      if(latest.completedAllReps){
+        suggested=latest.maxWeight+increment;
+        progressNote="INCREASE — hit all reps";
+      } else if(missedCurrent&&missedPrior){
+        suggested=Math.max(0,latest.maxWeight-increment);
+        progressNote=`DELOAD — missed reps 2 sessions in a row; drop ${increment}lb to rebuild`;
+      } else {
+        suggested=latest.maxWeight;
+        progressNote="HOLD — missed reps once; same weight, aim to complete";
+      }
+      return `${name}: ${trend} → ACTION: ${progressNote}, USE: ${suggested}lb (prior best: ${latest.maxWeight}lb)`;
     }).join("\n");
 
     const recentSummary=history.slice(0,7).map(w=>{
@@ -2689,7 +2752,7 @@ SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
 - MUST include at least 1 core exercise${profile.gripStrength==="weak"?`
 - MUST include at least 1 forearm/grip exercise — place in the finisher only, never in supersets`:""}${profile.priorityMuscle?`
 - ${profile.priorityMuscle} is a PRIORITY — user wants emphasis on ${profile.priorityMuscle}. Always include at least 1 ${profile.priorityMuscle} exercise regardless of focus day`:""}
-- WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with last logged weight and completion status. You MUST use these weights as your baseline. NEVER suggest a weight lower than the last logged weight — this is a hard rule with no exceptions. If all reps were completed: suggest last weight +${profile.compoundIncrement||5}lb for compounds, +${profile.isolationIncrement||2.5}lb for isolation. If reps were not completed: suggest the exact same weight as last time. If no history exists: make a reasonable starting estimate based on the exercise type.
+- WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with trend, action (INCREASE / HOLD / DELOAD), and a specific "USE: Xlb" target. You MUST use the "USE:" value for every exercise that has one. The three-way rule: all reps hit → add weight; missed reps once → hold at the same weight; missed reps TWO sessions in a row → deload by one increment (compound ${profile.compoundIncrement||5}lb / isolation ${profile.isolationIncrement||2.5}lb) so the user can rebuild. A deload is normal and healthy — do NOT refuse to go below the prior weight when the data says DELOAD. If no history exists: make a reasonable starting estimate based on the exercise type.
 - For unilateral exercises left and right are logged separately. Respect the user's dumbbell max from the USER CONTEXT above.
 - BODYWEIGHT exercises (Chest Dips, Push-Ups, Pull-Ups, Chin-Ups, Tricep Dips, Bench Dips, Plank, etc.) must have weight set to "bodyweight" — never assign a number weight to these
 - TIMED exercises (Plank, Wall Sit, Dead Hang, all Stretching entries): log seconds only, set reps to duration in seconds and weight to "bodyweight"${profile.gymType==="planet-fitness"?`
@@ -3253,7 +3316,7 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">Getting Started (LVL1)</div>
             <div className="help-p"><b>1.</b> Tap <b>👤</b> and set up your profile (above). Takes under a minute.</div>
-            <div className="help-p"><b>2.</b> Set your bodyweight via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
+            <div className="help-p"><b>2.</b> Set your bodyweight in your profile (👤) or via the <b>BW</b> icon in the header. Only needed if you use assisted machines (Chin/Dip Assist) so they can calculate real load.</div>
             <div className="help-p"><b>3.</b> Add your API key via the <b>⚙</b> icon (or you'll be prompted). Get one at console.anthropic.com. It stays on your device, never displayed.</div>
             <div className="help-p"><b>4.</b> Tap <b>AI REC</b> in the nav, pick a focus (Auto / Push / Pull / Legs), and hit generate. A workout plan will appear in about 20 seconds.</div>
             <div className="help-p"><b>5.</b> Tap <b>START THIS WORKOUT</b> to load it into LOG. Do the exercises, enter weight × reps as you go, and hit <b>SAVE WORKOUT</b> when finished.</div>
@@ -3281,19 +3344,22 @@ Respond ONLY with valid JSON in this exact format (no other text):
 
             <div className="section-label">The Main Tabs</div>
             <div className="help-p"><b>LOG</b> — where you record your workout. Pick a muscle group, pick an exercise, enter weight × reps, hit <b>SAVE WORKOUT</b> when you're done.</div>
+            <div className="help-p"><b>Confirming a set.</b> Each set row has a <b>✓</b> button. Type your real weight and reps and tap ✓ to lock the row in. If you're following the AI target exactly, you can leave the row blank and tap ✓ — it fills from the AI target for THAT row only, never another. If you want to log less than the AI suggested, type your numbers first, then tap ✓.</div>
+            <div className="help-p"><b>Weight progression.</b> Hit all reps → the AI adds weight next time. Miss once → it holds. Miss two sessions in a row → it drops the weight one increment so you can rebuild. Deloads are normal.</div>
+            <div className="help-p"><b>Time budget.</b> Set a session time budget in your profile (👤) and the AI will size the plan to fit — fewer superset pairs and a shorter finisher when you're busy.</div>
             <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data via the <b>💾</b> button in the header — details below.</div>
             <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations. Elevate Core shows level progression.</div>
             <div className="help-p"><b>AI REC</b> — Claude builds a superset-based workout tuned to your gym and profile. Pick your focus (Auto / Push / Pull / Legs). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
             <div className="help-p"><b>HELP</b> — you're here.</div>
 
             <div className="section-label">The AI Plans</div>
-            <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and the gym type you picked in your profile. It won't drop your weight below what you already lifted. If you set your gym to Planet Fitness it substitutes Smith Machines for barbells; home-gym users get dumbbell + bodyweight programming; commercial-gym users get barbell exercises when they fit.</div>
+            <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and the gym type you picked in your profile. If you hit all reps it adds weight; if you miss once it holds; if you miss two sessions in a row it drops the weight one increment so you can rebuild. If you set your gym to Planet Fitness it substitutes Smith Machines for barbells; home-gym users get dumbbell + bodyweight programming; commercial-gym users get barbell exercises when they fit.</div>
             <div className="help-p">You supply the API key — the app talks directly to Anthropic. A typical plan generation costs pennies. Your key is stored locally and never sent anywhere except Anthropic.</div>
             <div className="help-p">Once loaded, you can <b>SWAP</b> any exercise (machine taken?), <b>▲▼</b> reorder them, or add more manually with the button at the top of the plan.</div>
 
             <div className="section-label">Special Equipment</div>
             <div className="help-p"><b>TRX straps</b> log as bodyweight × reps. Progress by walking your feet forward for a harder angle.</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:4,marginBottom:8,fontStyle:"italic"}}>The three items below are Planet Fitness-specific. Skip them unless your gym has them.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:4,marginBottom:8,fontStyle:"italic"}}>The three items below are Planet Fitness-specific. Skip them unless your gym has them.</div>
             <div className="help-p"><b>PF360 rig</b> (Pushup + Climber) logs as rung × seconds. <i>Lower rung = harder.</i></div>
             <div className="help-p"><b>Elevate Core machine</b> logs as level (1–7) × seconds (Dynamic Plank) or level × reps (Scrunch). Higher level = harder.</div>
             <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
