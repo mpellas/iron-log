@@ -151,8 +151,12 @@ function loadProfile(){
 function saveProfile(p){
   try{
     localStorage.setItem("ironlog:profile",JSON.stringify(p));
-    // Mirror bodyweight to the standalone key so the header BW button and assisted-machine math see it.
-    if(typeof p.bodyweight==="number"&&p.bodyweight>0)saveBodyweight(p.bodyweight);
+    // Mirror bodyweight to the standalone key so the header BW button, assisted-machine math,
+    // and GAINS volume calc see it. A cleared field (0, blank, or NaN) propagates as "cleared"
+    // so stale values can't linger behind the scenes and leak into the AI prompt.
+    const bw=Number(p.bodyweight);
+    if(bw>0)saveBodyweight(bw);
+    else try{localStorage.removeItem("ironlog:bodyweight");}catch(e){}
   }catch(e){}
 }
 // Build the USER CONTEXT paragraph in the AI prompt from the profile. Only emits lines for non-default values,
@@ -1217,6 +1221,11 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
   // Prefix with "e.g." so the hint is clearly an example, not a logged value.
   const wPH=aiWeight?`e.g. ${aiWeight}`:"lbs";
   const rPH=aiReps?`e.g. ${aiReps}`:"reps";
+  // Effective floor for the "below last" warning: if the AI's own target is below the user's last
+  // peak, this is a planned deload — treat the AI target as the new floor so the warning only
+  // fires when the user types below the AI's already-lower target.
+  const aiW=aiWeight?Number(aiWeight):NaN;
+  const effFloor=(floor>0&&!isNaN(aiW)&&aiW<floor)?aiW:floor;
   // Pending copies (from ADD SET) show their values dimmed/italic as "not yet done" hints. Any typing or
   // the per-row ✓ button clears _pending (handled in updateSet / onConfirm), making them real values.
   const pending=!!set._pending;
@@ -1265,8 +1274,8 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
     </div>
   );
   if(isUnilateral){
-    const belowL=floor>0&&set.weightL!==""&&set.weightL!=null&&Number(set.weightL)<Number(floor);
-    const belowR=floor>0&&set.weightR!==""&&set.weightR!=null&&Number(set.weightR)<Number(floor);
+    const belowL=effFloor>0&&set.weightL!==""&&set.weightL!=null&&Number(set.weightL)<Number(effFloor);
+    const belowR=effFloor>0&&set.weightR!==""&&set.weightR!=null&&Number(set.weightR)<Number(effFloor);
     return(
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       <div className="set-row">
@@ -1284,7 +1293,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
+      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {effFloor}lb</span>}
     </div>
     );
   }
@@ -1324,7 +1333,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
-  const belowLast=floor>0&&set.weight!==""&&set.weight!=null&&Number(set.weight)<Number(floor);
+  const belowLast=effFloor>0&&set.weight!==""&&set.weight!=null&&Number(set.weight)<Number(effFloor);
   return(
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       <div className="set-row">
@@ -1334,7 +1343,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {floor}lb</span>}
+      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {effFloor}lb</span>}
     </div>
   );
 }
@@ -1428,12 +1437,16 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
   // Per-row ✓ confirm: locks THIS row only, never touches another.
   // If the row has any typed values, strip _pending and keep what's there.
   // If the row is completely blank, fill from the AI target (user asked for this shortcut).
-  // Never applies to cardio / timed / rung / level — those rows are confirmed by just typing in them.
+  // Timed/cardio rows: fill the duration (seconds) field from aiReps if the AI target is set.
+  // Level/rung rows don't have a universal target shape, so ✓ on a blank one is a no-op.
   const confirmSet=(id)=>{
     const sw=exercise.aiWeight||"",sr=exercise.aiReps||"";
+    // Parse a seconds value out of aiReps for timed exercises ("45", "45 sec", "40s" → "45" / "40").
+    const srSeconds=(()=>{const m=(sr||"").toString().match(/\d+/);return m?m[0]:"";})();
     const hasAnyTyped=(s)=>{
       if(isUnilateral)return !!(s.weightL||s.weightR||s.repsL||s.repsR);
-      if(isBodyweight||isAssisted)return !!(s.reps||s.assist);
+      if(isBodyweight&&!isTimed)return !!(s.reps);
+      if(isAssisted)return !!(s.reps||s.assist);
       if(isCardio)return !!(s.duration||s.resistance||s.calories);
       if(isTimed||isRung)return !!(s.duration||s.rung);
       if(isLevel)return !!(s.level||s.reps||s.duration);
@@ -1447,8 +1460,12 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(!sw&&!sr)return s;
       // Blank row + AI target → fill THIS row only.
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
+      // Timed exercises (Plank, Dead Hang, etc.): fill duration from parsed seconds.
+      if(isTimed)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
+      // Cardio: aiReps often doesn't apply, but if it's a numeric minute target, use it.
+      if(isCardio)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
-      if(isCardio||isTimed||isRung||isLevel)return s;
+      if(isRung||isLevel)return s; // these need user-picked rung/level, can't auto-fill
       return{...s,weight:sw,reps:sr,_pending:false};
     })});
   };
@@ -1533,7 +1550,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           ))}
         </div>
       )}
-      {exercise.aiWeight&&(
+      {exercise.aiWeight&&!isTimed&&(
         <div style={{marginTop:6,marginBottom:2}}>
           <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
             AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
@@ -1541,7 +1558,14 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
         </div>
       )}
       {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
-      {exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
+      {isTimed&&exercise.aiReps&&(
+        <div style={{marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+            AI TARGET: {exercise.aiReps} seconds · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
+          </div>
+        </div>
+      )}
+      {!isTimed&&exercise.aiWeight===""&&exercise.aiReps&&isBodyweight&&(
         <div style={{marginTop:6,marginBottom:2}}>
           <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
             AI TARGET: {exercise.aiReps} reps bodyweight · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
@@ -2381,15 +2405,14 @@ function GymTracker(){
   },[exercises,note,loadedFromAI]);
 
   const handleSetBodyweight=()=>{
-    const bw=window.prompt('Enter your bodyweight in lbs (for assisted machine calculations):',String(loadBodyweight()||''));
-    if(bw&&!isNaN(parseFloat(bw))){
-      const n=parseFloat(bw);
-      saveBodyweight(n);
-      // Keep profile.bodyweight in sync so the profile modal doesn't show a stale value.
-      const nextProfile={...profile,bodyweight:n};
-      saveProfile(nextProfile);
-      setProfile(nextProfile);
-    }
+    const bw=window.prompt('Enter your bodyweight in lbs (for assisted machine calculations; leave blank to clear):',String(loadBodyweight()||''));
+    if(bw===null)return; // cancel
+    const n=parseFloat(bw);
+    const clean=(!bw.trim()||isNaN(n)||n<=0)?0:n;
+    // Route through saveProfile so clearing (0) also wipes the standalone key — no stale value sent to AI.
+    const nextProfile={...profile,bodyweight:clean};
+    saveProfile(nextProfile);
+    setProfile(nextProfile);
   };
   const updateExercise=(id,u)=>setExercises(prev=>prev.map(e=>e.id===id?u:e));
   const removeExercise=(id)=>setExercises(prev=>{
@@ -2447,13 +2470,22 @@ function GymTracker(){
       if(Rcomplete&&!Lcomplete){delete out.weightL;delete out.repsL;}
       return out;
     };
-    const cleanedExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)})).filter(ex=>ex.sets.length>0);
+    const withCleanedSets=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
+    const droppedExerciseNames=withCleanedSets.filter(ex=>ex.sets.length===0).map(ex=>ex.name).filter(Boolean);
+    const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
     // If the user had sets with partial data (e.g. weight typed but no reps), warn before dropping them silently.
     const droppedWithData=beforeNonEmpty-afterSetCount;
-    if(droppedWithData>0){
-      const proceed=window.confirm(`${droppedWithData} ${droppedWithData===1?"set has":"sets have"} incomplete data (e.g. weight without reps) and will be dropped.\n\nSave the ${afterSetCount} complete ${afterSetCount===1?"set":"sets"} anyway?`);
+    if(droppedWithData>0||droppedExerciseNames.length>0){
+      const parts=[];
+      if(droppedExerciseNames.length>0){
+        parts.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data (${droppedExerciseNames.join(", ")})`);
+      }
+      if(droppedWithData>0){
+        parts.push(`${droppedWithData} ${droppedWithData===1?"set":"sets"} with only copied or partial values`);
+      }
+      const proceed=window.confirm(`Dropping ${parts.join(" and ")} from this save.\n\nSave the ${afterSetCount} complete ${afterSetCount===1?"set":"sets"} anyway?`);
       if(!proceed)return;
     }
     const workoutFocus=activeFocus;
@@ -2501,12 +2533,10 @@ function GymTracker(){
     const isUni=isUnilateralExercise(ex.name);
     const isAssist=ASSISTED_EXERCISES.has(ex.name||"");
     const isTimedEx=TIMED_EXERCISES.has(ex.name||"");
-    // Safety net: for standard weight/reps exercises, never prefill below last session's peak.
-    // The AI is asked to progress upward; this guarantees it can't ever go backward.
-    if(!isUni&&!isAssist&&!isTimedEx&&!isBW&&sw!==""){
-      const lastMax=getLastSessionMaxWeight(ex.name,history);
-      if(lastMax>0&&Number(sw)<lastMax)sw=String(lastMax);
-    }
+    // Deloads are allowed. If the AI's progression logic says to drop a weight after two missed
+    // sessions, let that lower weight through. (Removed the old "never go below last peak" clamp.)
+    // SetRow still shows an orange "below last" hint, but suppresses it when the AI target itself
+    // is the lower value (i.e. a planned deload).
     // Sets start EMPTY. The AI's suggested weight/reps live only on aiWeight/aiReps and show as
     // placeholder hints in the inputs. The user must type what they actually did. Previously the
     // sets were prefilled with the AI numbers, which meant an untouched AI plan saved as completed
