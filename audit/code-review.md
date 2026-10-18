@@ -1,54 +1,49 @@
-# 90Strong (mpellas/iron-log) code review: HEAD 9db6725
+# 90Strong (mpellas/iron-log) code review: HEAD 54e8ceb
 
-**Commit reviewed:** `9db6725` "Fix 3 HIGH audit items from 363c44b audit" (Oct 17, 2026, 5:14 AM PT). It changes `index.html` only (+60 / −30 against `9af9f25`). The only other commit since `363c44b` is `9af9f25`, which adds `audit/README.md`.
+**Commit reviewed:** `54e8ceb` "Fix 14 items from the 9db6725 audit" (Oct 18, 2026, 6:22 AM PT). App change is `index.html` only (+132 / −68 vs `9db6725`).
 
-**Live Pages matches HEAD.** The SHA-256 of https://mpellas.github.io/iron-log/ is identical to HEAD's `index.html` (`fec28422…`). Last-Modified is Oct 17, 5:15 AM PT.
+**Live Pages matches HEAD.** SHA-256 of https://mpellas.github.io/iron-log/ equals HEAD `index.html` (`7909b335…`). Last-Modified Oct 18, 6:22 AM PT.
 
-**Scope:** read-only, no AI calls, nothing changed in the repo. Line numbers refer to `index.html` at HEAD. The JSX block parses cleanly (checked with @babel/parser).
+**Scope:** read-only code review, no AI calls. Line numbers refer to `index.html` at `54e8ceb`.
 
-## The 3 HIGH fixes
+## New HIGH regression
 
-| Audit # | Fix | Verdict | Evidence |
+1. **Bodyweight sets with reps only are now dropped at save.** The new rule in `hasAnyData` (line 2478) only accepts reps-only sets when `s.weight===undefined`. But bodyweight exercises (Push-Ups, Pull-Ups, etc.) get `{weight:"",reps:""}` from both `blankSet` (line 1428) and `parseEx` (line 2596), since neither has a bodyweight branch. So a Push-Up set with "12" reps fails the check, is listed as a "partial set" in the warning, and is not saved. Fix: allow reps-only when `BODYWEIGHT_EXERCISES.has(ex.name)` (or give bodyweight a `{reps}` set shape), instead of keying on the `weight` key.
+
+## Claimed fixes
+
+| # | Fix | Verdict | Evidence |
 |---|---|---|---|
-| 3 | Deloads no longer cancelled | **Correct** | The clamp in `parseEx` that raised a lower AI weight to the last peak is gone (lines 2536–2539). `SetRow` now uses `effFloor = min(last peak, AI target)` for the orange "below last" hint (lines 1227–1228, 1277–1278, 1336). A planned deload now reaches the hint, the AI TARGET line and the ✓ fill. Small nit: the hint still says "below last: Xlb" when X is the AI target. |
-| 2 | Cleared bodyweight no longer lingers | **Correct** | `saveProfile` removes `ironlog:bodyweight` when bodyweight is 0, blank or NaN (lines 157–159). The BW button now goes through `saveProfile`, and a blank entry clears it (lines 2407–2415). The assisted-load math (line 1313) and the AI progression data (line 2622) read that key, so a stale value can't reach the AI any more. |
-| 1 | Plank / timed rows | **Partly correct** | Correct: a timed row shows "AI TARGET: N seconds" instead of "N reps bodyweight" (lines 1561–1574). ✓ now fills a blank timed row's seconds (line 1464). Plank can't get `reps` any more, so new saves no longer produce "No data logged". The save warning now names any exercises it drops (lines 2474, 2480–2488). Gaps: see new issues 1–3 below. |
+| 1 | ✓ no longer fills cardio | **Partly** | Pure cardio rows no longer fill (line 1480). But Mountain Climbers is still in both `TIMED_EXERCISES` (835) and `CARDIO_EXERCISES` (854). `confirmSet` checks `isTimed` first (line 1479), so ✓ still puts the seconds target into its MIN box. |
+| 2 | Finisher `duration` read | **Fixed** | `parseEx` falls back to `ex.duration` (line 2567). Finisher Plank/Jump Rope now get a target. ✓ still won't fill Jump Rope (cardio, by design). |
+| 3 | Cleared weight saves "– × N" | **Fixed, but caused the regression above** | Line 2478. |
+| 4 | Half-filled L/R warning | **Fixed (inline)** | Orange "right side empty — will save single-side" (lines 1293–1298, 1309). Save still strips silently. |
+| 5 | ✓ / ADD SET on blank row | **Fixed** | `window.alert` messages (lines 1446, 1465). Alerts are blocking on a phone; a toast would be nicer. |
+| 6 | Save warning names sets | **Fixed** | Names "Exercise set N" (lines 2507–2516); fully cleared rows no longer counted. |
+| 7 | Deload "below last" | **Fixed** | `matchesAi` suppresses the hint when weight equals the AI target (lines 1226, 1290, 1342). Wording still "below last: Xlb" when the hint does fire under a deload. |
+| 8 | Time budget | **Fixed** | Pair count, finisher minutes and exercise count follow the budget (lines 2819–2822, 2827, 2866, 2872–2876). EST shows "/ BUDGET" and turns orange when over (lines 2996–3006). |
+| 9 | Cardio LAST line | **Fixed** | Cardio history renders "15min · lv5 · 140cal" (lines 466–470, 1576). Jump Rope no longer "new exercise". |
+| 10 | Gym-type cardio re-prune | **Fixed** | `useEffect` on `profile.gymType` (lines 2196–2200). |
+| 11 | Bike naming | **Fixed** | "Bike" everywhere; legacy "Stationary Bike" normalized on load (line 296). |
+| 12 | Sizes / BW button | **Mostly fixed** | BW shows "180 BW", "BW" when unset (line 2947), matching the agreed format, but still 10px font. Cardio boxes 60–90px; START REST and ↺ 44px; badges 11px; LVL 12px; L/R columns aligned. |
+| 13 | Import keeps bodyweight | **Fixed** | Lines 97–98 and 115–121. |
+| 14 | Grip / Arm length removed | **Partly** | UI fields gone, but `gripStrength`/`armLength` still feed the AI prompt (lines 196–209, 2828, 2872). Users who had "weak" saved are stuck with it and can't change it. Arc Trainer removed from the picker but still in the exercise list (line 763). |
 
-## New issues from this commit
+## Prior open items still open
 
-1. **Mountain Climbers ✓ fills the MIN field with seconds.** It is in both `TIMED_EXERCISES` (line 821) and `CARDIO_EXERCISES` (line 840), and `parseEx` forces it to Cardio (line 2520). `SetRow` renders the cardio MIN row (line 1262), but `confirmSet` checks `isTimed` first (line 1464) and writes the seconds target, such as 45, into the minutes field. History then shows "45min" (line 1647). It also shows "AI TARGET: 45 seconds" above a MIN box.
-2. **Cardio ✓ copies `aiReps` straight into minutes** (line 1466). For cardio, `aiReps` is a rep count or seconds, never minutes. A Burpees target of "15" fills 15 min. There is no AI TARGET line for cardio, so the user can't see what the ✓ will fill.
-3. **Finisher rows still don't fill.** The finisher JSON gives `"duration":"40 sec"` and no `reps` (line 2829). `parseEx` only reads `ex.reps` (line 2531), so finisher Plank, Jump Rope and similar rows get no target, and ✓ still does nothing on them.
-4. **Possible bodyweight loss when importing an old backup.** `importData` saves the backup's bodyweight (line 97), then `saveProfile(merged)` (line 114). If the backup's profile has no `bodyweight`, the default 0 now deletes the key that was just imported. Low risk, since current exports include it.
-5. The timed row's seconds box still uses the placeholder "sec", not "e.g. 45" (line 1305). Minor.
+- **Mountain Climbers 3 min reads back as "3s".** `getLastLoggedDetail` checks `TIMED_EXERCISES` first (line 462). Root cause unchanged: one exercise, two types.
+- **LAST "R—×—".** Missing side still filled with "—" (line 463), and the renderer treats "—" as data (line 1576).
+- **HELP/ABOUT PF360 / Elevate Core wording** shows regardless of gym type (lines 3445–3446).
+- **"2 MUSCLES" stat**: not touched by this commit.
+- **API key in plain text** in `localStorage "ironlog:apikey"` (lines 218, 236).
 
-## Prior open items
+## Other notes
 
-| Item | Status | Evidence |
-|---|---|---|
-| Cleared weight saves "– × N" | **Still open** | `hasAnyData`'s reps-only rule (line 2451) still accepts reps with an empty weight on any exercise. Fix: use that rule only for `BODYWEIGHT_EXERCISES`. |
-| Save warning counts copied marker | **Partly fixed** | The wording now says "N sets with only copied or partial values", which is accurate for untouched copies. `beforeNonEmpty` (line 2463) still counts a `_pending:false` key, so a row that was typed in and then fully cleared still counts as a dropped set. |
-| LAST line "R—×—" | **Still open** | `getLastLoggedDetail` fills a missing side with "—" (line 454), and the LAST renderer treats "—" as data (line 1560). |
-| Half-filled L/R set: no warning | **Still open** | `stripIncompleteSide` (lines 2465–2471) silently drops the empty side. The set still counts as complete, so no warning fires. |
-| ADD SET on a blank row is silent | **Still open** | A silent `return` (line 1433). |
-| ✓ on a blank row with no target is silent | **Still open** | Returns the row unchanged, with no message or focus (line 1460). |
-| ✓ on cardio / timed rows | **Partly fixed** | Timed superset rows fill now. Cardio fills with the wrong unit, and finisher rows don't fill (new issues 1–3). Rung and level rows still don't fill (line 1468). |
-| Plank target in reps / "No data logged" | **Fixed** for new saves | See HIGH #1. Old history entries saved that way still show "No data logged". |
-| Cleared bodyweight keeps old value | **Fixed** | See HIGH #2. Note: the "180" a tester saw on a clean start is the field's placeholder, "e.g. 180" (line 1116), not a stored value. |
-| BW button says just "BW" | **Still open** | Line 2900, 10px font. |
-| Deload clamp | **Fixed** | See HIGH #3. |
-| Time budget vs "5 pairs" | **Still open** | The budget line asks for 3/4/5 pairs (line 206), but the rules still say "SUPERSETS (5 pairs" (line 2778) and "Exactly ONE of the 5 superset pairs" (line 2818). |
-| Fixed finisher length | **Still open** | Fixed at 10/15 min (lines 2823, 2829). The budget line asks for fewer finisher exercises, but the header still says 10/15 min. |
-| EST ignores budget | **Still open** | Line 2951. |
-| Bike vs Stationary Bike | **Still open** | "Bike" in the exercise list (line 744) vs "Stationary Bike" in the equipment list (lines 304, 1952). Both kept on purpose for filtering (lines 518–521). |
-| Grip strength / Arm length | **Still open** | Profile lines 1129 and 1138, and prompt lines 189–202. |
-| Arc Trainer | **Still open** | Lines 749 and 1952. |
-| API key in plain text | **Still open** | `localStorage "ironlog:apikey"` (lines 211, 229), plus in-browser Babel (line 27). |
+- The timed seconds box still uses placeholder "sec" (lines 1243, 1254, 1311).
 
 ## Suggested next fixes, in order
 
-1. In `confirmSet`, check `isCardio` before `isTimed`, and don't fill minutes from `aiReps`. Or convert seconds to minutes, and show a cardio target line.
-2. In `parseEx`, read `ex.duration` when `ex.reps` is missing, so finisher rows get a target.
-3. Apply the reps-only save rule only to bodyweight exercises (line 2451).
-4. Warn when a left/right set has one side blank, and fix the "R—×—" LAST line.
-5. Make the pair count and finisher length follow the time budget.
+1. Restore reps-only saves for bodyweight exercises (line 2478).
+2. Give Mountain Climbers one type (remove it from `TIMED_EXERCISES` or `CARDIO_EXERCISES`) so ✓, input and LAST agree.
+3. Stop "—" placeholders in the L/R LAST line.
+4. Drop grip/arm from the prompt now that the UI is gone.
