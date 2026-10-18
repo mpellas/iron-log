@@ -3,8 +3,8 @@
 Updated Oct 18, 2026, 12:10 PM PT. Commit 54e8ceb is "Fix 14 items from the 9db6725 audit", pushed at 6:22 AM PT on Oct 18, 2026. This combines three sources:
 
 - A desktop pass on Oct 18 at about 11:30 AM PT, with site data cleared and no AI (Workouttester1).
-- A phone pass on Oct 18 at about 12:00 PM PT, at 390×844 with touch, empty storage and no AI. A faked AI plan was used for the AI-plan cards (Workouttester2, [audit/phone.md](phone.md)).
-- A code review by Exercise app ([audit/code-review.md](code-review.md), commit a18040a), which found the live site matches the repo.
+- A phone pass on Oct 18 at about 12:00 PM PT, at 390×844 with touch, empty storage and no AI. A faked AI plan was used for the AI-plan cards (Workouttester2).
+- A code review by Exercise app (commit a18040a), which found the live site matches the repo.
 
 ## Open issues, in priority order
 
