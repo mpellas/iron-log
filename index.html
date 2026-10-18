@@ -94,7 +94,8 @@ function importData(file,onDone){
       }
       if(Array.isArray(data.difficultExercises))localStorage.setItem("ironlog:difficult",JSON.stringify(data.difficultExercises));
       if(Array.isArray(data.unavailableExercises))localStorage.setItem("ironlog:unavailable",JSON.stringify(data.unavailableExercises));
-      if(typeof data.bodyweight==="number"||typeof data.bodyweight==="string")saveBodyweight(data.bodyweight);
+      // Only overwrite bodyweight if the backup actually has one; a null/0/missing field preserves the current value.
+      if((typeof data.bodyweight==="number"&&data.bodyweight>0)||(typeof data.bodyweight==="string"&&data.bodyweight.trim()!==""&&parseFloat(data.bodyweight)>0))saveBodyweight(data.bodyweight);
       if(data.intensityLevel===1||data.intensityLevel===2||data.intensityLevel===3)saveIntensityLevel(data.intensityLevel);
       if(data.cardioEquipment&&typeof data.cardioEquipment==="object")localStorage.setItem("ironlog:cardio",JSON.stringify(data.cardioEquipment));
       if(Array.isArray(data.playlists))savePlaylists(data.playlists);
@@ -111,6 +112,12 @@ function importData(file,onDone){
         // Only the user's own in-browser upgrade preserves PF (that path is in loadProfile).
         const merged={...DEFAULT_PROFILE,...data.profile};
         if(!data.profile.gymType)merged.gymType="commercial";
+        // Preserve the current bodyweight if the imported profile doesn't have one — stops an older
+        // backup from silently wiping a value the user set after that backup was taken.
+        if(data.profile.bodyweight===undefined||data.profile.bodyweight===null||Number(data.profile.bodyweight)<=0){
+          const current=loadBodyweight();
+          if(current>0)merged.bodyweight=current;
+        }
         saveProfile(merged);
       }
       onDone(true);
@@ -285,11 +292,13 @@ function loadCardioEquipment(){
     let gymType="commercial";
     try{const p=JSON.parse(localStorage.getItem("ironlog:profile")||"null");if(p&&p.gymType)gymType=p.gymType;}catch(e){}
     const s=localStorage.getItem("ironlog:cardio");
+    // Normalize legacy "Stationary Bike" entries to "Bike" (matches the exercise library's name).
+    const normalize=(list)=>Array.from(new Set((list||[]).map(it=>it==="Stationary Bike"?"Bike":it)));
     if(s){
-      const stored=JSON.parse(s);
+      const stored=normalize(JSON.parse(s));
       // Prune items the current gym type can't have. Covers users who set up with Commercial, picked
       // machines, then switched to Home or Hotel-basic — they shouldn't carry Arc Trainer into Home.
-      const impossible=gymType==="home"?["Treadmill","Stationary Bike","Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]
+      const impossible=gymType==="home"?["Treadmill","Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]
         :gymType==="hotel-basic"?["Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike"]
         :[];
       const pruned=stored.filter(it=>!impossible.includes(it));
@@ -301,8 +310,8 @@ function loadCardioEquipment(){
     // No stored selection yet — default based on the user's gym type.
     if(gymType==="home")return["Jump Rope"];
     if(gymType==="hotel-basic")return["Treadmill","Elliptical","Jump Rope"];
-    return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];
-  }catch{return["Treadmill","Stationary Bike","Elliptical","Stair Climber","Recumbent Bike"];}
+    return["Treadmill","Bike","Elliptical","Stair Climber","Recumbent Bike"];
+  }catch{return["Treadmill","Bike","Elliptical","Stair Climber","Recumbent Bike"];}
 }
 function saveCardioEquipment(list){try{localStorage.setItem("ironlog:cardio",JSON.stringify(list));}catch(e){}}
 function loadUnavailableExercises(){try{return JSON.parse(localStorage.getItem("ironlog:unavailable")||"[]");}catch{return[];}}
@@ -454,6 +463,11 @@ function getLastLoggedDetail(name,history){
     if(uni.length)return{type:"uni",sets:uni.map(s=>({L:s.weightL||"—",R:s.weightR||"—",rL:s.repsL||"—",rR:s.repsR||"—"}))};
     if(ast.length)return{type:"assist",sets:ast.map(s=>({assist:s.assist||"0",reps:s.reps}))};
     if(bil.length)return{type:"bil",sets:bil.map(s=>({weight:s.weight,reps:s.reps}))};
+    // Cardio: duration + optional resistance + optional calories. Showed as "15min · lv5 · 140cal".
+    if(ex.muscle==="Cardio"){
+      const cd=ex.sets.filter(s=>s.duration||s.calories);
+      if(cd.length)return{type:"cardio",sets:cd.map(s=>({dur:s.duration||"",lvl:s.resistance||"",cal:s.calories||""}))};
+    }
   }
   return null;
 }
@@ -515,8 +529,8 @@ const GYM_ONLY_EXPLICIT=new Set([
   // Users who truly can't do them can mark 🚫 unavailable to drop them individually.
 ]);
 // Cardio machines excluded by gym type. Hotels usually have at least a treadmill, so hotel-basic keeps that.
-// Both naming forms ("Bike" and "Stationary Bike") are included so the library's "Bike" and the picker's
-// "Stationary Bike" are both caught.
+// Both naming forms ("Bike" and "Stationary Bike") remain in the exclusion set defensively, in case any
+// older user data or AI response still carries the legacy "Stationary Bike" label.
 const CARDIO_MACHINE_EXERCISES_HOME=new Set([
   "Treadmill","Bike","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Bike Sprint",
 ]);
@@ -867,7 +881,7 @@ const css=`
   .logo{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:2px;color:var(--accent);line-height:1;}
   .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;}
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px;}
-  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 4px;margin-left:0;line-height:1;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
+  .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 6px;margin-left:0;line-height:1;min-width:44px;min-height:44px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
   .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
@@ -1126,24 +1140,6 @@ function ProfileModal({profile,onSave,onClose,onReset}){
         </div>
 
         <div className="profile-field">
-          <label className="profile-label">Grip strength</label>
-          <select className="profile-input" value={p.gripStrength} onChange={e=>upd("gripStrength",e.target.value)}>
-            <option value="weak">weak</option>
-            <option value="average">average</option>
-            <option value="strong">strong</option>
-          </select>
-        </div>
-
-        <div className="profile-field">
-          <label className="profile-label">Arm length</label>
-          <select className="profile-input" value={p.armLength} onChange={e=>upd("armLength",e.target.value)}>
-            <option value="short">short</option>
-            <option value="average">average</option>
-            <option value="long">long</option>
-          </select>
-        </div>
-
-        <div className="profile-field">
           <label className="profile-check-row">
             <input type="checkbox" checked={!!p.inclinePreference} onChange={e=>upd("inclinePreference",e.target.checked)}/>
             <span>Prefer incline bench (dumbbell presses default to incline)</span>
@@ -1226,6 +1222,8 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
   // fires when the user types below the AI's already-lower target.
   const aiW=aiWeight?Number(aiWeight):NaN;
   const effFloor=(floor>0&&!isNaN(aiW)&&aiW<floor)?aiW:floor;
+  // Explicit match-check: if the user typed exactly the AI target, suppress the hint regardless of floor.
+  const matchesAi=(v)=>!isNaN(aiW)&&v!==""&&v!=null&&Number(v)===aiW;
   // Pending copies (from ADD SET) show their values dimmed/italic as "not yet done" hints. Any typing or
   // the per-row ✓ button clears _pending (handled in updateSet / onConfirm), making them real values.
   const pending=!!set._pending;
@@ -1261,21 +1259,27 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
   );
   if(isCardio)return(
     <div className="set-row" style={{flexWrap:"wrap",gap:6}}>
-      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{maxWidth:80}}/>
+      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:60,maxWidth:90,flex:"0 1 70px"}}/>
       <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>MIN</span>
       {!noResistance&&<>
-        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{maxWidth:70}}/>
+        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:60,maxWidth:80,flex:"0 1 60px"}}/>
         <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>LEVEL</span>
       </>}
-      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{maxWidth:80}}/>
+      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:60,maxWidth:90,flex:"0 1 70px"}}/>
       <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>CAL</span>
       {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
   if(isUnilateral){
-    const belowL=effFloor>0&&set.weightL!==""&&set.weightL!=null&&Number(set.weightL)<Number(effFloor);
-    const belowR=effFloor>0&&set.weightR!==""&&set.weightR!=null&&Number(set.weightR)<Number(effFloor);
+    const belowL=effFloor>0&&set.weightL!==""&&set.weightL!=null&&Number(set.weightL)<Number(effFloor)&&!matchesAi(set.weightL);
+    const belowR=effFloor>0&&set.weightR!==""&&set.weightR!=null&&Number(set.weightR)<Number(effFloor)&&!matchesAi(set.weightR);
+    // Half-filled warning: one side typed, the other blank. On save, the empty side is stripped
+    // and the set logs as single-side. Flag it inline so the user can fix it before saving.
+    const Ltyped=(set.weightL!==""&&set.weightL!=null)||(set.repsL!==""&&set.repsL!=null);
+    const Rtyped=(set.weightR!==""&&set.weightR!=null)||(set.repsR!==""&&set.repsR!=null);
+    const halfL=Ltyped&&!Rtyped;
+    const halfR=Rtyped&&!Ltyped;
     return(
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       <div className="set-row">
@@ -1283,7 +1287,8 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         <input className="set-input" type="number" inputMode="decimal" placeholder={wPH} value={set.weightL||""} onChange={e=>onChange({...set,weightL:e.target.value})} style={mergeStyle(belowL?{borderColor:"#e8a13a",color:"#e8a13a"}:null)}/>
         <span className="set-label">×</span>
         <input className="set-input" type="number" inputMode="decimal" placeholder={rPH} value={set.repsL||""} onChange={e=>onChange({...set,repsL:e.target.value})} style={mergeStyle(null)}/>
-        <button className="btn btn-danger" onClick={onRemove} style={{visibility:"hidden"}}>✕</button>
+        {onConfirm&&<button className="btn-check" style={{visibility:"hidden"}} aria-hidden="true" tabIndex={-1}>✓</button>}
+        <button className="btn btn-danger" onClick={onRemove} style={{visibility:"hidden"}} aria-hidden="true" tabIndex={-1}>✕</button>
       </div>
       <div className="set-row">
         <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",width:20,textAlign:"center"}}>R</span>
@@ -1294,6 +1299,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
       {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {effFloor}lb</span>}
+      {(halfL||halfR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>⚠ {halfL?"right":"left"} side empty — will save single-side</span>}
     </div>
     );
   }
@@ -1333,7 +1339,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
   );
-  const belowLast=effFloor>0&&set.weight!==""&&set.weight!=null&&Number(set.weight)<Number(effFloor);
+  const belowLast=effFloor>0&&set.weight!==""&&set.weight!=null&&Number(set.weight)<Number(effFloor)&&!matchesAi(set.weight);
   return(
     <div style={{display:"flex",flexDirection:"column",gap:2}}>
       <div className="set-row">
@@ -1372,13 +1378,13 @@ function RestTimer({seconds,activeRest}){
   return(
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:activeRest?"rgba(255,140,0,0.12)":"var(--surface2)",border:activeRest?"1px solid rgba(255,140,0,0.5)":"1px solid var(--border)",borderRadius:6,marginBottom:10,marginTop:2}}>
       <div style={{flex:1}}>
-        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:activeRest?"#ff8c00":"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
-        {activeRest&&<div style={{fontFamily:"IBM Plex Mono",fontSize:8,color:"var(--muted)",letterSpacing:1,marginTop:2}}>⏱ {seconds}s — then next superset</div>}
+        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:activeRest?"#ff8c00":"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
+        {activeRest&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",letterSpacing:1,marginTop:2}}>⏱ {seconds}s — then next superset</div>}
       </div>
-      {timeLeft===null&&<button className="btn btn-ghost" style={{padding:"4px 12px",fontSize:10}} onClick={start}>{activeRest?"GO":"START REST"}</button>}
+      {timeLeft===null&&<button className="btn btn-ghost" style={{padding:"10px 14px",fontSize:12,minHeight:44}} onClick={start}>{activeRest?"GO":"START REST"}</button>}
       {timeLeft!==null&&timeLeft>0&&<span style={{fontFamily:"Bebas Neue",fontSize:22,color:activeRest?"#ff8c00":"var(--accent)",letterSpacing:2}}>{mins}:{secs}</span>}
-      {timeLeft===0&&<span style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--accent)",letterSpacing:1}}>NEXT SET ✓</span>}
-      {timeLeft!==null&&<button className="btn btn-ghost" style={{padding:"4px 10px",fontSize:10}} onClick={()=>{setTimeLeft(null);setRunning(false);}}>↺</button>}
+      {timeLeft===0&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",letterSpacing:1}}>NEXT SET ✓</span>}
+      {timeLeft!==null&&<button className="btn btn-ghost" style={{padding:"10px 12px",fontSize:14,minHeight:44,minWidth:44}} onClick={()=>{setTimeLeft(null);setRunning(false);}}>↺</button>}
     </div>
   );
 }
@@ -1430,7 +1436,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     if(!last)return onChange({...exercise,sets:[blankSet()]});
     // Check if last set has any data to copy. If it's empty, don't add another empty duplicate.
     const lastHasData=Object.keys(last).some(k=>k!=="id"&&k!=="_pending"&&last[k]!==undefined&&last[k]!=="");
-    if(!lastHasData)return; // reviewer #6: don't duplicate a blank row
+    if(!lastHasData){
+      try{window.alert("Fill in the current set before adding another. ADD SET copies the last filled row so you can tweak it.");}catch(e){}
+      return;
+    }
     const copy={...last,id:generateId(),_pending:true};
     onChange({...exercise,sets:[...exercise.sets,copy]});
   };
@@ -1452,6 +1461,12 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isLevel)return !!(s.level||s.reps||s.duration);
       return !!(s.weight||s.reps);
     };
+    // Nothing to fill AND nothing typed → refuse with a short nudge, so the tap isn't silent.
+    const target=exercise.sets.find(s=>s.id===id);
+    if(target&&!hasAnyTyped(target)&&!sw&&!sr){
+      try{window.alert("Type weight × reps first, then tap ✓ to confirm. (Or wait for an AI target to fill a blank row.)");}catch(e){}
+      return;
+    }
     onChange({...exercise,sets:exercise.sets.map(s=>{
       if(s.id!==id)return s;
       // Already-typed values: just lock in by clearing pending.
@@ -1462,8 +1477,9 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
       // Timed exercises (Plank, Dead Hang, etc.): fill duration from parsed seconds.
       if(isTimed)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
-      // Cardio: aiReps often doesn't apply, but if it's a numeric minute target, use it.
-      if(isCardio)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
+      // Cardio: unit of aiReps is ambiguous ("30" could be sec or min, "15" is reps for Burpees).
+      // Don't auto-fill — too easy to put a seconds value into the MIN box. User types instead.
+      if(isCardio)return s;
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
       if(isRung||isLevel)return s; // these need user-picked rung/level, can't auto-fill
       return{...s,weight:sw,reps:sr,_pending:false};
@@ -1524,10 +1540,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           <div className="exercise-name">{exercise.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <div className="exercise-meta">{exercise.muscle}{isCardio?(CARDIO_EXERCISES.has(exercise.name)?" · duration + calories":" · duration + level + calories"):""}</div>
-            {isBodyweight&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#0a0a0a",background:"var(--accent)",borderRadius:3,padding:"1px 5px"}}>BODYWEIGHT</span>}
-            {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"1px 5px"}}>L+R</span>}
-            {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#fff",background:"#555",borderRadius:3,padding:"1px 5px"}}>NOT AT MY GYM</span>}
-            {flagged&&<span style={{fontFamily:"IBM Plex Mono",fontSize:8,letterSpacing:2,color:"#fff",background:"#cc4400",borderRadius:3,padding:"1px 5px"}}>NEEDS WORK</span>}
+            {isBodyweight&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent)",borderRadius:3,padding:"2px 6px"}}>BODYWEIGHT</span>}
+            {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"2px 6px"}}>L+R</span>}
+            {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#fff",background:"#555",borderRadius:3,padding:"2px 6px"}}>NOT AT MY GYM</span>}
+            {flagged&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#fff",background:"#cc4400",borderRadius:3,padding:"2px 6px"}}>NEEDS WORK</span>}
             {exerciseTiming&&exerciseTiming.start&&<span className="exercise-time-badge">⏱ {formatDuration(Math.max(0,Math.round(((exerciseTiming.end||Date.now())-exerciseTiming.start)/1000)))}</span>}
           </div>
         </div>
@@ -1557,7 +1573,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           </div>
         </div>
       )}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}if(last.type==="cardio"){const parts=last.sets.map(s=>{const segs=[];if(s.dur)segs.push(`${s.dur}min`);if(s.lvl)segs.push(`lv${s.lvl}`);if(s.cal)segs.push(`${s.cal}cal`);return segs.join(" · ")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {isTimed&&exercise.aiReps&&(
         <div style={{marginTop:6,marginBottom:2}}>
           <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
@@ -1949,7 +1965,7 @@ function ProgressTab({history}){
   );
 }
 
-const ALL_CARDIO_EQUIPMENT=["Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Jump Rope"];
+const ALL_CARDIO_EQUIPMENT=["Treadmill","Bike","Recumbent Bike","Elliptical","Stair Climber","Rowing Machine","Ski Erg","Jump Rope"];
 
 function CardioEquipmentModal({selected,onSave,onClose,gymType}){
   const [choices,setChoices]=useState(selected);
@@ -1957,7 +1973,7 @@ function CardioEquipmentModal({selected,onSave,onClose,gymType}){
   // Equipment that typically doesn't live at a home or hotel gym. We still render all options, but
   // sort the likely-not-available ones to the bottom with a muted "unlikely at your gym" hint.
   // Hotel keeps Treadmill and Elliptical as normal (very common at hotel gyms); home excludes everything.
-  const UNLIKELY_AT_HOME=new Set(["Treadmill","Stationary Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]);
+  const UNLIKELY_AT_HOME=new Set(["Treadmill","Bike","Recumbent Bike","Elliptical","Arc Trainer","Stair Climber","Rowing Machine","Ski Erg"]);
   const UNLIKELY_AT_HOTEL=new Set(["Arc Trainer","Stair Climber","Rowing Machine","Ski Erg","Recumbent Bike"]);
   const unlikely=gymType==="home"?UNLIKELY_AT_HOME:gymType==="hotel-basic"?UNLIKELY_AT_HOTEL:new Set();
   const sorted=[...ALL_CARDIO_EQUIPMENT].sort((a,b)=>{const ua=unlikely.has(a)?1:0;const ub=unlikely.has(b)?1:0;return ua-ub;});
@@ -2174,6 +2190,14 @@ function GymTracker(){
   const cancelRestTimer=()=>{setRestTimer(null);};
   const [showCardioModal,setShowCardioModal]=useState(false);
   const [cardioEquipment,setCardioEquipment]=useState(()=>loadCardioEquipment());
+  // Re-prune the cardio equipment selection whenever gym type changes (user switched Home ↔ Commercial, etc.).
+  // Without this, a user who selected Arc Trainer at Commercial would still see it checked after
+  // switching to Home until the next full reload. Persist the pruned list too.
+  useEffect(()=>{
+    const pruned=loadCardioEquipment();
+    setCardioEquipment(pruned);
+    saveCardioEquipment(pruned);
+  },[profile.gymType]);
   const [intensityLevel,setIntensityLevel]=useState(()=>loadIntensityLevel());
   const [showDataModal,setShowDataModal]=useState(false);
   const [playlists,setPlaylists]=useState(()=>loadPlaylists());
@@ -2447,20 +2471,20 @@ function GymTracker(){
       if((nz(s.weightL)&&nz(s.repsL))||(nz(s.weightR)&&nz(s.repsR)))return true;
       // assisted: weight-field 0/bw plus reps counts as bodyweight; assist with reps counts
       if(nz(s.assist)&&nz(s.reps))return true;
-      // bodyweight: reps alone (no weight field expected)
-      if(nz(s.reps)&&!s.weight&&!s.weightL&&!s.weightR)return true;
+      // bodyweight: reps alone — only when the set shape genuinely has no weight field.
+      // A weighted exercise's blankSet always includes a `weight: ""` key, so `weight === undefined`
+      // means "this set was authored as bodyweight-only." This stops a weighted exercise where
+      // the user cleared the weight from being saved as "– × N reps".
+      if(nz(s.reps)&&s.weight===undefined&&s.weightL===undefined&&s.weightR===undefined&&s.assist===undefined)return true;
       // timed with rung or level: duration present
       if((s.rung!==undefined&&s.rung!=="")&&nz(s.duration))return true;
       if((s.level!==undefined&&s.level!=="")&&(nz(s.duration)||nz(s.reps)))return true;
-      // plain timed
-      if(nz(s.duration)&&!s.weight&&(s.rung===undefined||s.rung==="")&&(s.level===undefined||s.level===""))return true;
+      // plain timed — only when the set shape is purely a duration (no weight key defined)
+      if(nz(s.duration)&&s.weight===undefined&&(s.rung===undefined||s.rung==="")&&(s.level===undefined||s.level===""))return true;
       // cardio
       if(nz(s.duration)||nz(s.calories))return true;
       return false;
     };
-    // Count sets before and after cleaning so we can warn the user if any complete-looking rows were silently dropped.
-    const beforeSetCount=exercises.reduce((s,ex)=>s+((ex.sets||[]).length),0);
-    const beforeNonEmpty=exercises.reduce((s,ex)=>s+((ex.sets||[]).filter(st=>Object.keys(st).some(k=>k!=="id"&&st[k]!==undefined&&st[k]!=="")).length),0);
     // For unilateral sets, zero out the empty side so HISTORY doesn't display R:–lb×–
     const stripIncompleteSide=s=>{
       const out={...s};
@@ -2470,20 +2494,32 @@ function GymTracker(){
       if(Rcomplete&&!Lcomplete){delete out.weightL;delete out.repsL;}
       return out;
     };
+    // Build a per-set audit: for each dropped set that had typed values, record exercise + index + why.
+    // A fully cleared row (every value blank or 0 and not pending) is dropped silently — the user
+    // never meant to log it. Only rows with some typed content earn a warning.
+    const anyTyped=s=>Object.keys(s).some(k=>k!=="id"&&k!=="_pending"&&s[k]!==undefined&&s[k]!=="");
+    const droppedSetNotes=[];
+    exercises.forEach(ex=>{
+      (ex.sets||[]).forEach((s,i)=>{
+        if(!hasAnyData(s)&&anyTyped(s)&&!s._pending){
+          // Partial — had typing but didn't survive the completeness check.
+          droppedSetNotes.push(`${ex.name||"exercise"} set ${i+1}`);
+        }
+      });
+    });
     const withCleanedSets=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
     const droppedExerciseNames=withCleanedSets.filter(ex=>ex.sets.length===0).map(ex=>ex.name).filter(Boolean);
     const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
-    // If the user had sets with partial data (e.g. weight typed but no reps), warn before dropping them silently.
-    const droppedWithData=beforeNonEmpty-afterSetCount;
-    if(droppedWithData>0||droppedExerciseNames.length>0){
+    // Warn only when there's genuinely dropped-partial content or whole exercises falling out.
+    if(droppedSetNotes.length>0||droppedExerciseNames.length>0){
       const parts=[];
       if(droppedExerciseNames.length>0){
         parts.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data (${droppedExerciseNames.join(", ")})`);
       }
-      if(droppedWithData>0){
-        parts.push(`${droppedWithData} ${droppedWithData===1?"set":"sets"} with only copied or partial values`);
+      if(droppedSetNotes.length>0){
+        parts.push(`${droppedSetNotes.length} partial ${droppedSetNotes.length===1?"set":"sets"} (${droppedSetNotes.join(", ")})`);
       }
       const proceed=window.confirm(`Dropping ${parts.join(" and ")} from this save.\n\nSave the ${afterSetCount} complete ${afterSetCount===1?"set":"sets"} anyway?`);
       if(!proceed)return;
@@ -2528,7 +2564,10 @@ function GymTracker(){
     const isBW=BODYWEIGHT_EXERCISES.has(ex.name)||raw.includes("body")||raw.includes("bw");
     const wm=raw.match(/(\d+(\.\d+)?)/);
     let sw=isBW?"":(wm?wm[1]:"");
-    const rm=(ex.reps||"").toString().match(/(\d+)/);
+    // Prefer the AI's "reps" field; if that's empty (finisher items send "duration" instead,
+    // e.g. {"name":"Jump Rope","duration":"45 sec"}), fall back to duration so timed finishers
+    // get a target shown.
+    const rm=(ex.reps||"").toString().match(/(\d+)/)||(ex.duration||"").toString().match(/(\d+)/);
     const sr=rm?rm[1]:"";
     const isUni=isUnilateralExercise(ex.name);
     const isAssist=ASSISTED_EXERCISES.has(ex.name||"");
@@ -2771,11 +2810,18 @@ function GymTracker(){
       return unused.length?`${muscle}: ${unused.join(", ")}`:null;
     }).filter(Boolean).join("\n");
 
+    // Scale superset pair count and finisher length to the user's time budget (if set).
+    // 0 = no cap (default to 5 pairs / 10-15 min finisher). <30 min = 3 pairs / 5 min finisher.
+    // 30-45 min = 4 pairs / 7 min finisher. 45+ or 0 = 5 pairs / 10-15 min finisher.
+    const budget=parseInt(profile.sessionTimeBudget||0)||0;
+    const pairCount=budget===0?5:(budget<30?3:(budget<45?4:5));
+    const finisherMin=budget===0?(intensityLevel===2?15:10):(budget<30?5:(budget<45?7:(intensityLevel===2?15:10)));
+    const finisherExCount=budget===0?(intensityLevel===2?"4-5":"3-4"):(budget<30?"2-3":(budget<45?"3":(intensityLevel===2?"4-5":"3-4")));
     const supersetRules=`BUILD A SUPERSET-BASED WORKOUT:
 ⚠ HARD CONSTRAINTS (non-negotiable):
 - UNAVAILABLE exercises — NEVER include these under any circumstances, not even as alternatives: ${unavailableExercises.length>0?unavailableExercises.join(", "):"none"}.
 
-SUPERSETS (5 pairs - A then B back-to-back no rest, then rest between pairs):
+SUPERSETS (${pairCount} pairs - A then B back-to-back no rest, then rest between pairs):
 - Pair opposing or complementary muscle groups
 - SESSION FOCUS: ${activeFocus} — this session emphasizes ${activeFocus==="Push"?"Chest, Shoulders, and Triceps (at least 3 push exercises)":activeFocus==="Pull"?"Back and Biceps (at least 3 pull exercises)":"Legs (at least 3 leg exercises)"}
 - No muscle group should be skipped entirely — always include at least 1 exercise from each of: Push muscles (Chest/Shoulders/Triceps), Pull muscles (Back/Biceps), Legs, Core
@@ -2815,18 +2861,19 @@ ACTIVE REST (between each superset pair):
 - activeRest field: short instruction e.g. "${intensity===2?"Treadmill sprint 40 sec max effort":"cardio machine moderate pace 60 sec"}"
 ${intensity===2?`
 CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
-- Exactly ONE of the 5 superset pairs must be a conditioning pair where BOTH A and B are high-intensity bodyweight movements
+- Exactly ONE of the ${pairCount} superset pairs must be a conditioning pair where BOTH A and B are high-intensity bodyweight movements
 - Examples: Burpees + Mountain Climbers, Jumping Jacks + High Knees, Box Steps + High Knees
 - Label this pair's pairNote as "CONDITIONING PAIR — max effort"
 - This pair uses restSeconds=40 same as others`:""}
 
-FINISHER (${intensity===2?"15":"10"}-min circuit to spike heart rate):
-- ${intensity===2?"4-5":"3-4"} exercises back-to-back with minimal rest
+FINISHER (${finisherMin}-min circuit to spike heart rate):
+- ${finisherExCount} exercises back-to-back with minimal rest
 - ${intensity===2?"LEVEL 2: Push hard — sprints, burpees, battle movements. Max effort throughout.":"Use cardio machines or bodyweight available at the user's gym (per USER CONTEXT above)."}
 ${profile.gripStrength==="weak"?"- MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — place in the finisher at end of session only":""}
 
 Respond ONLY with valid JSON in this exact format (no other text):
-{"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"cardio machine 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${intensity===2?"15":"10"}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}`;
+{"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"cardio machine 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${finisherMin}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}
+NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one object per pair, with pair numbers 1..${pairCount}).`;
 
     const prompt=history.length===0
       ?`New user starting out. Build a beginner full-body superset workout appropriate for their gym (see USER CONTEXT).\n${userContext}\nKNOWN exercises (prefer these, but you may suggest real exercises not on this list):\n${exerciseList}\n\n${supersetRules}`
@@ -2897,8 +2944,8 @@ Respond ONLY with valid JSON in this exact format (no other text):
             <div className="logo">90STRONG</div>
             <div className="logo-sub">Workout Tracker</div>
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-              <button className="header-key" style={{marginLeft:0,fontSize:10,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>BW</button>
-              <button className="header-key" style={{marginLeft:0,fontSize:9,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===1?"var(--muted)":intensityLevel===2?"var(--accent)":"var(--accent2)",fontWeight:"bold"}} title={intensityLevel===1?"Mode: L1 Standard AI — tap to change":intensityLevel===2?"Mode: L2 High-Intensity AI — tap to change":"Mode: L3 Circuit (no AI) — tap to change"} onClick={()=>{const nl=intensityLevel===3?1:intensityLevel+1;const wasL3=intensityLevel===3;setIntensityLevel(nl);saveIntensityLevel(nl);if(nl===3)setTab("lvl3");else if(wasL3&&tab==="lvl3")setTab("log");}}>LVL{intensityLevel}</button>
+              <button className="header-key" style={{marginLeft:0,fontSize:10,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>{(profile.bodyweight||loadBodyweight())>0?`${Math.round(profile.bodyweight||loadBodyweight())} BW`:"BW"}</button>
+              <button className="header-key" style={{marginLeft:0,fontSize:12,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===1?"var(--muted)":intensityLevel===2?"var(--accent)":"var(--accent2)",fontWeight:"bold"}} title={intensityLevel===1?"Mode: L1 Standard AI — tap to change":intensityLevel===2?"Mode: L2 High-Intensity AI — tap to change":"Mode: L3 Circuit (no AI) — tap to change"} onClick={()=>{const nl=intensityLevel===3?1:intensityLevel+1;const wasL3=intensityLevel===3;setIntensityLevel(nl);saveIntensityLevel(nl);if(nl===3)setTab("lvl3");else if(wasL3&&tab==="lvl3")setTab("log");}}>LVL{intensityLevel}</button>
               <button className="header-key" style={{marginLeft:0,opacity:playlists.length>0?1:0.35}} title="Playlists" onClick={()=>setShowPlaylistModal(true)}>🎵</button>
               <button className="header-key" style={{marginLeft:0}} title="Backup & Restore" onClick={()=>setShowDataModal(true)}>💾</button>
               <button className="header-key" style={{marginLeft:0}} title="Cardio Equipment" onClick={()=>setShowCardioModal(true)}>🏃</button>
@@ -2946,12 +2993,17 @@ Respond ONLY with valid JSON in this exact format (no other text):
                           <div className="session-timer-label">{running?"ELAPSED":"TOTAL"}</div>
                           <div className="session-timer-value" style={{color:running?"var(--accent)":"var(--muted)"}}>{formatDuration(elapsed)}</div>
                         </div>
-                        {est!==null&&(
-                          <div className="session-timer-stat">
-                            <div className="session-timer-label">EST</div>
-                            <div className="session-timer-value" style={{color:"var(--muted)"}}>{formatDuration(est)}</div>
-                          </div>
-                        )}
+                        {est!==null&&(()=>{
+                          const budgetMin=parseInt(profile.sessionTimeBudget||0)||0;
+                          const estMin=Math.round(est/60);
+                          const overBudget=budgetMin>0&&estMin>budgetMin;
+                          return(
+                            <div className="session-timer-stat">
+                              <div className="session-timer-label">EST{budgetMin>0?` / BUDGET`:""}</div>
+                              <div className="session-timer-value" style={{color:overBudget?"#e8a13a":"var(--muted)"}}>{formatDuration(est)}{budgetMin>0?` / ${budgetMin}m`:""}</div>
+                            </div>
+                          );
+                        })()}
                         <div className="session-timer-actions">
                           {running&&!restTimer&&(
                             <button className="session-timer-btn rest" onClick={startRestTimer}>REST {restSec}s</button>
