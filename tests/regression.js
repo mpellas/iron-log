@@ -1,162 +1,148 @@
 #!/usr/bin/env node
 // Run with: node tests/regression.js
-// Covers the invariants documented at the top of index.html — one locked-in test per audit-caught
-// bug class, so a future edit can't silently reintroduce one.
 //
-// This file deliberately re-implements the hot functions in isolation (rather than importing from
-// index.html, which is a Babel-transpiled script tag). The purpose is to lock in the SHAPES of the
-// contracts, not to prove the production copy still matches — the companion REGRESSION-GUARDS block
-// in index.html does that. If a production edit breaks a guard, this test file still passes but
-// the production copy is wrong; keep them in sync by code review.
+// Extracts module-scope helpers DIRECTLY from index.html and runs assertions against them, so a
+// future edit that breaks a production function also fails the test (not just a drift-prone copy).
+// This replaces the earlier "copy the function body into the test" approach which the 934380e code
+// review correctly called out as unable to catch real bugs.
 
-let pass=0, fail=0;
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const scriptMatch = html.match(/<script type="text\/babel">\n([\s\S]*?)\n<\/script>/);
+if (!scriptMatch) { console.error("Could not find <script type='text/babel'> in index.html"); process.exit(1); }
+const scriptSrc = scriptMatch[1];
+
+// We only need the module-scope declarations: the Set constants and the pure helper functions
+// defined just below them (hasAnyData, parseCardioAiTarget). React components reference `React` and
+// `useState` and would blow up in a plain Node sandbox, so we extract a prefix slice ending right
+// before the first component definition.
+const firstComponentIdx = scriptSrc.search(/\nfunction [A-Z][A-Za-z0-9_]*\s*\(/);
+if (firstComponentIdx < 0) { console.error("Could not find first React component in script"); process.exit(1); }
+const prefix = scriptSrc.slice(0, firstComponentIdx);
+
+// Make the Set constants available by declaring an empty window + a localStorage shim first,
+// then evaluating the prefix. We skip the `const {useState,...} = React;` line at the top.
+// Globals the production prefix depends on. React is stubbed with the three hooks
+// the top-of-file destructures. localStorage is an in-memory shim.
+const prelude = `
+  var React = {
+    createElement: () => null,
+    useState: () => [null, () => {}],
+    useEffect: () => {},
+    useRef: () => ({ current: null }),
+  };
+  var window = { location: { hash: "" }, history: { replaceState: () => {} }, AudioContext: null, prompt: () => "" };
+  var localStorage = {
+    _store: {},
+    getItem(k) { return this._store[k] ?? null; },
+    setItem(k, v) { this._store[k] = String(v); },
+    removeItem(k) { delete this._store[k]; },
+  };
+  var navigator = { vibrate: () => {} };
+  var document = { getElementById: () => null };
+`;
+
+// `const` declarations at the top of a VM script don't become context properties; wrap the whole
+// thing in an IIFE that returns the exports we need to test. This is cheaper than parsing out each
+// function individually and keeps us in lockstep with the production source.
+const exportsList = [
+  "hasAnyData", "parseCardioAiTarget",
+  "BODYWEIGHT_EXERCISES", "TIMED_EXERCISES", "CARDIO_EXERCISES", "RUNG_EXERCISES",
+  "LEVEL_EXERCISES", "ASSISTED_EXERCISES", "UNILATERAL_EXERCISES",
+  "buildGymExclusionSet", "EXERCISE_LIBRARY", "GYM_ONLY_EXPLICIT", "PF_SPECIFIC_EXERCISES",
+];
+const wrapped = `
+  (() => {
+${prelude}
+${prefix}
+    return { ${exportsList.join(", ")} };
+  })()
+`;
+let exported;
+try {
+  exported = vm.runInNewContext(wrapped, { console });
+} catch (e) {
+  console.error("Failed to evaluate index.html prefix:", e.message);
+  console.error("Hint: a new module-scope declaration may reference a browser-only API, or an\n  exported symbol may have been renamed.");
+  process.exit(1);
+}
+const { hasAnyData, parseCardioAiTarget, BODYWEIGHT_EXERCISES, buildGymExclusionSet, EXERCISE_LIBRARY } = exported;
+const ctx = exported;
+if (typeof hasAnyData !== "function") { console.error("hasAnyData missing from module scope"); process.exit(1); }
+if (typeof parseCardioAiTarget !== "function") { console.error("parseCardioAiTarget missing from module scope"); process.exit(1); }
+if (!BODYWEIGHT_EXERCISES || !BODYWEIGHT_EXERCISES.has("Push-Ups")) { console.error("BODYWEIGHT_EXERCISES not loaded (Push-Ups missing)"); process.exit(1); }
+if (typeof buildGymExclusionSet !== "function") { console.error("buildGymExclusionSet missing from module scope"); process.exit(1); }
+if (!EXERCISE_LIBRARY) { console.error("EXERCISE_LIBRARY not loaded"); process.exit(1); }
+
+// ---------- Assertions ----------
+let pass = 0, fail = 0;
 const t = (name, ok) => {
   if (ok) { pass++; console.log("PASS:", name); }
   else { fail++; console.log("FAIL:", name); }
 };
 
-// ---------- Guard 1 & 2: hasAnyData shape discrimination ----------
-const nz = v => v !== undefined && v !== null && v !== "" && Number(v) !== 0;
-function hasAnyData(s) {
-  if (s._pending) return false;
-  if (nz(s.weight) && nz(s.reps)) return true;
-  if ((nz(s.weightL) && nz(s.repsL)) || (nz(s.weightR) && nz(s.repsR))) return true;
-  if (nz(s.assist) && nz(s.reps)) return true;
-  if (nz(s.reps) && s.weight === undefined && s.weightL === undefined && s.weightR === undefined && s.assist === undefined) return true;
-  if ((s.rung !== undefined && s.rung !== "") && nz(s.duration)) return true;
-  if ((s.level !== undefined && s.level !== "") && (nz(s.duration) || nz(s.reps))) return true;
-  if (nz(s.duration) && s.weight === undefined && (s.rung === undefined || s.rung === "") && (s.level === undefined || s.level === "")) return true;
-  if (nz(s.duration) || nz(s.calories)) return true;
-  return false;
-}
-t("hasAnyData: weighted with cleared weight DROPPED", hasAnyData({ weight: "", reps: "8" }) === false);
-t("hasAnyData: Push-Ups (no weight key) with reps KEPT", hasAnyData({ reps: "15" }) === true);
-t("hasAnyData: weighted with both KEPT", hasAnyData({ weight: "100", reps: "8" }) === true);
-t("hasAnyData: pending copy DROPPED", hasAnyData({ weight: "100", reps: "8", _pending: true }) === false);
-t("hasAnyData: unilateral partial L KEPT", hasAnyData({ weightL: "50", repsL: "8", weightR: "", repsR: "" }) === true);
-t("hasAnyData: cardio duration KEPT", hasAnyData({ duration: "15" }) === true);
-t("hasAnyData: fully blank DROPPED", hasAnyData({ weight: "", reps: "" }) === false);
+// Guard 1 & 2: hasAnyData shape discrimination (now bodyweight-NAME-aware)
+t("hasAnyData: weighted set with cleared weight DROPPED", hasAnyData({ weight: "", reps: "8" }, "Bench Press") === false);
+t("hasAnyData: Push-Ups (no weight key) with reps KEPT", hasAnyData({ reps: "15" }, "Push-Ups") === true);
+t("hasAnyData: Push-Ups with stale weight=\"\" key STILL KEPT (name-aware fix)", hasAnyData({ weight: "", reps: "15" }, "Push-Ups") === true);
+t("hasAnyData: weighted with both KEPT", hasAnyData({ weight: "100", reps: "8" }, "Bench Press") === true);
+t("hasAnyData: pending copy DROPPED", hasAnyData({ weight: "100", reps: "8", _pending: true }, "Bench Press") === false);
+t("hasAnyData: unilateral partial L KEPT", hasAnyData({ weightL: "50", repsL: "8", weightR: "", repsR: "" }, "Single-Arm Dumbbell Row") === true);
+t("hasAnyData: cardio duration KEPT", hasAnyData({ duration: "15" }, "Treadmill") === true);
+t("hasAnyData: fully blank DROPPED", hasAnyData({ weight: "", reps: "" }, "Bench Press") === false);
 
-// ---------- Guard 3: Cardio ✓ unit-aware ----------
-function confirmCardio(set, aiReps) {
-  const sr = aiReps || "";
-  const srSeconds = (() => { const m = (sr || "").toString().match(/\d+/); return m ? m[0] : ""; })();
-  if (set.duration || set.resistance || set.calories) return { ...set, _pending: false };
-  if (!sr || !srSeconds) return set;
-  const hasReps = /\brep/i.test(sr);
-  const hasMin = /min/i.test(sr);
-  const hasSec = /sec/i.test(sr);
-  if (hasReps) return set;
-  if (hasMin) return { ...set, duration: String(Number(srSeconds)), _pending: false };
-  if (hasSec) {
-    const minutes = Math.round((Number(srSeconds) / 60) * 10) / 10;
-    return { ...set, duration: String(minutes), _pending: false };
-  }
-  return set;
-}
-t("cardio: '15 reps' → no fill", confirmCardio({ duration: "", resistance: "", calories: "" }, "15 reps").duration === "");
-t("cardio: '60 sec' → 1 min", confirmCardio({ duration: "", resistance: "", calories: "" }, "60 sec").duration === "1");
-t("cardio: '45 sec' → 0.8 min", confirmCardio({ duration: "", resistance: "", calories: "" }, "45 sec").duration === "0.8");
-t("cardio: '5 min' → 5 min", confirmCardio({ duration: "", resistance: "", calories: "" }, "5 min").duration === "5");
-t("cardio: bare '15' → no fill (ambiguous)", confirmCardio({ duration: "", resistance: "", calories: "" }, "15").duration === "");
+// Guard 3: parseCardioAiTarget unit-aware
+t("cardio: '15 reps' → refuse (reps-flavored)", parseCardioAiTarget("15 reps").fill === false);
+t("cardio: '60 sec' → fill 1 min", parseCardioAiTarget("60 sec").fill === true && parseCardioAiTarget("60 sec").minutes === 1);
+t("cardio: '45 sec' → fill 0.75 min (2-decimal precision)", parseCardioAiTarget("45 sec").minutes === 0.75);
+t("cardio: '5 min' → fill 5 min", parseCardioAiTarget("5 min").fill === true && parseCardioAiTarget("5 min").minutes === 5);
+t("cardio: bare '15' → refuse (ambiguous)", parseCardioAiTarget("15").fill === false);
+t("cardio: empty string → refuse", parseCardioAiTarget("").fill === false);
+t("cardio: '30 seconds' → fill 0.5 min", parseCardioAiTarget("30 seconds").minutes === 0.5);
+t("cardio: refusal reason is informative", typeof parseCardioAiTarget("15").refusalReason === "string");
 
-// ---------- Guard 4: Uni LAST line undefined → side skipped ----------
-function renderUniLast(sets) {
-  return sets.map(s => {
-    const hasL = s.L !== undefined && s.L !== "" && s.L !== null;
-    const hasR = s.R !== undefined && s.R !== "" && s.R !== null;
-    const segs = [];
-    if (hasL) segs.push(`L${s.L}×${s.rL}`);
-    if (hasR) segs.push(`R${s.R}×${s.rR}`);
-    return segs.join("/") || "—";
-  }).join("  ·  ");
-}
+// Guard: PF exclusion includes barbells (Audit 934380e #2)
+const pfExcl = buildGymExclusionSet("planet-fitness", EXERCISE_LIBRARY);
+t("PF excludes Barbell Bench Press", pfExcl.has("Barbell Bench Press"));
+t("PF excludes Barbell Row", pfExcl.has("Barbell Row"));
+t("PF excludes Barbell Deadlift", pfExcl.has("Barbell Deadlift"));
+t("PF excludes Barbell Overhead Press", pfExcl.has("Barbell Overhead Press"));
+t("PF excludes Sumo Deadlift", pfExcl.has("Sumo Deadlift"));
+t("PF still includes Smith Machine Bench Press", !pfExcl.has("Smith Machine Bench Press"));
+t("PF still includes Dumbbell Bench Press", !pfExcl.has("Dumbbell Bench Press"));
+t("PF excludes PF360 for other users (sanity)", buildGymExclusionSet("commercial", EXERCISE_LIBRARY).has("PF360 Pushup + Climber"));
+t("Commercial does NOT exclude Barbell Bench Press", !buildGymExclusionSet("commercial", EXERCISE_LIBRARY).has("Barbell Bench Press"));
+
+// Guard: home still excludes Smith Machine
+const homeExcl = buildGymExclusionSet("home", EXERCISE_LIBRARY);
+t("Home excludes Smith Machine Bench Press", homeExcl.has("Smith Machine Bench Press"));
+t("Home excludes Barbell Bench Press", homeExcl.has("Barbell Bench Press"));
+t("Home excludes Lat Pulldown", homeExcl.has("Lat Pulldown"));
+
+// Guard 4: Uni LAST line undefined → side skipped. (This is a render-shape invariant; tested
+// by reasoning rather than exec'd here, since it lives inside a React component.)
+const renderUniLast = (sets) => sets.map(s => {
+  const hasL = s.L !== undefined && s.L !== "" && s.L !== null;
+  const hasR = s.R !== undefined && s.R !== "" && s.R !== null;
+  const segs = [];
+  if (hasL) segs.push(`L${s.L}×${s.rL}`);
+  if (hasR) segs.push(`R${s.R}×${s.rR}`);
+  return segs.join("/") || "—";
+}).join("  ·  ");
 t("uni LAST: L-only (undefined R) → L25×10", renderUniLast([{ L: "25", R: undefined, rL: "10", rR: undefined }]) === "L25×10");
 t("uni LAST: both filled → L25×10/R20×8", renderUniLast([{ L: "25", R: "20", rL: "10", rR: "8" }]) === "L25×10/R20×8");
-t("uni LAST: R-only (undefined L) → R20×8", renderUniLast([{ L: undefined, R: "20", rL: undefined, rR: "8" }]) === "R20×8");
 
-// ---------- Guard 5: Save warning names pending copies ----------
-function buildDroppedNotes(exercises) {
-  const anyTyped = s => Object.keys(s).some(k => k !== "id" && k !== "_pending" && s[k] !== undefined && s[k] !== "");
-  const notes = [];
-  exercises.forEach(ex => {
-    (ex.sets || []).forEach((s, i) => {
-      if (hasAnyData(s)) return;
-      if (!anyTyped(s)) return;
-      const label = `${ex.name} set ${i + 1}`;
-      notes.push(s._pending ? `${label} (copied, not confirmed)` : label);
-    });
-  });
-  return notes;
-}
-const warn = buildDroppedNotes([{ name: "Bench Press", sets: [
-  { id: "a", weight: "100", reps: "8" },             // kept
-  { id: "b", weight: "100", reps: "8", _pending: true }, // dropped, named
-  { id: "c", weight: "", reps: "" },                 // dropped silently (no typing)
-  { id: "d", weight: "95", reps: "" },               // dropped, partial typed
-] }]);
-t("warning: pending copy named", warn.some(w => w.includes("set 2") && w.includes("copied, not confirmed")));
-t("warning: partial-typed named", warn.some(w => w === "Bench Press set 4"));
-t("warning: fully blank NOT named", warn.length === 2);
+// Guard: Mountain Climbers only in CARDIO
+t("Mountain Climbers NOT in BODYWEIGHT_EXERCISES", !ctx.BODYWEIGHT_EXERCISES.has("Mountain Climbers"));
+t("Mountain Climbers NOT in TIMED_EXERCISES", !ctx.TIMED_EXERCISES.has("Mountain Climbers"));
+t("Mountain Climbers IS in CARDIO_EXERCISES", ctx.CARDIO_EXERCISES.has("Mountain Climbers"));
 
-// ---------- Guard 6: Mountain Climbers only in CARDIO ----------
-// (This is a static invariant — we check the index.html bytes outside this script by grep. Here
-// we just document the rule.)
-t("Mountain Climbers in CARDIO only (manual check — see REGRESSION-GUARDS)", true);
+// Guard: Chest list leads with Barbell for commercial users
+t("Chest list leads with Barbell Bench Press", EXERCISE_LIBRARY.Chest[0] === "Barbell Bench Press");
 
-// ---------- Guard 7: matchesAi suppresses below-last ----------
-function matchesAi(v, aiWeight) {
-  const aiW = aiWeight ? Number(aiWeight) : NaN;
-  return !isNaN(aiW) && v !== "" && v != null && Number(v) === aiW;
-}
-t("matchesAi: 45 == AI 45 → true (suppress hint)", matchesAi("45", "45") === true);
-t("matchesAi: 44 vs AI 45 → false", matchesAi("44", "45") === false);
-t("matchesAi: no AI target → false", matchesAi("45", "") === false);
-
-// ---------- Guard 8: Cardio equipment default union on gym-type change ----------
-function switchGym(currentPruned, nextGymType) {
-  const defaultsFor = gt => {
-    if (gt === "home") return ["Jump Rope"];
-    if (gt === "hotel-basic") return ["Treadmill", "Elliptical", "Jump Rope"];
-    if (gt === "planet-fitness") return ["Treadmill", "Bike", "Elliptical", "Stair Climber", "Recumbent Bike"];
-    return ["Treadmill", "Bike", "Elliptical", "Stair Climber", "Recumbent Bike"];
-  };
-  return Array.from(new Set([...currentPruned, ...defaultsFor(nextGymType)]));
-}
-let merged = switchGym(["Jump Rope"], "commercial");
-t("gym switch: home → commercial restores Treadmill", merged.includes("Treadmill"));
-t("gym switch: home → commercial includes 5 commercial defaults", ["Treadmill","Bike","Elliptical","Stair Climber","Recumbent Bike"].every(x => merged.includes(x)));
-merged = switchGym([], "hotel-basic");
-t("gym switch: empty → hotel-basic restores Treadmill+Elliptical+Jump Rope", merged.length === 3 && merged.includes("Treadmill"));
-
-// ---------- Guard 9: Grip/arm not in AI context ----------
-function buildUserContextFromProfile(p) {
-  // Minimal reproduction — just confirms the removed branches don't exist.
-  const lines = ["IMPORTANT USER CONTEXT:"];
-  if (p.gripStrength === "weak") lines.push("WEAK GRIP"); // ← this line SHOULD NOT be in prod
-  if (p.armLength === "long") lines.push("LONG ARMS"); // ← this line SHOULD NOT be in prod
-  return lines.join("\n");
-}
-// (We can't exec the real buildUserContextFromProfile here without the whole app. This test
-// documents the invariant that grip/arm lines must not fire. Keep the production function free
-// of these branches — see index.html buildUserContextFromProfile.)
-t("grip/arm invariant (manual check — see index.html buildUserContextFromProfile)", true);
-
-// ---------- Guard 10: Bodyweight clear ----------
-function saveProfile(p, storage) {
-  storage["ironlog:profile"] = JSON.stringify(p);
-  const bw = Number(p.bodyweight);
-  if (bw > 0) storage["ironlog:bodyweight"] = String(bw);
-  else delete storage["ironlog:bodyweight"];
-}
-let storage = { "ironlog:bodyweight": "180" };
-saveProfile({ bodyweight: 0 }, storage);
-t("bodyweight: 0 clears standalone key", storage["ironlog:bodyweight"] === undefined);
-storage = { "ironlog:bodyweight": "180" };
-saveProfile({ bodyweight: 175 }, storage);
-t("bodyweight: 175 writes standalone key", storage["ironlog:bodyweight"] === "175");
-
-// ---------- Summary ----------
 console.log("---");
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

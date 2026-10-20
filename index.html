@@ -569,7 +569,21 @@ function buildGymExclusionSet(gymType,library){
   const exclude=new Set();
   // Commercial gyms don't necessarily have PF-branded gear; exclude the 4 PF items from commercial too.
   if(g==="commercial"||g==="home"||g==="hotel-basic"){PF_SPECIFIC_EXERCISES.forEach(e=>exclude.add(e));}
-  if(g==="planet-fitness"||g==="commercial")return exclude;
+  if(g==="commercial")return exclude;
+  // Planet Fitness has no free barbells but keeps machines and Smith Machines. Exclude any exercise
+  // whose name starts with "Barbell " or contains "Barbell Preacher Curl" / "EZ-Bar" etc. — tracked
+  // via GYM_ONLY_EXPLICIT's "barbell items" group. Audit 934380e #2: without this, PF users saw
+  // Barbell Bench Press as the default in the Chest picker and the AI could suggest barbells.
+  if(g==="planet-fitness"){
+    Object.values(library).forEach(group=>group.forEach(ex=>{
+      if(/^Barbell /.test(ex))exclude.add(ex);
+      if(GYM_ONLY_EXPLICIT.has(ex)&&/barbell|ez-bar/i.test(ex))exclude.add(ex);
+    }));
+    // "Sumo Deadlift" / "Romanian Deadlift" / "Skull Crushers" / "Close-Grip Bench Press" are ambiguous
+    // but typically barbell at PF — exclude them to match GYM_ONLY_EXPLICIT's intent.
+    ["Sumo Deadlift","Romanian Deadlift","Sumo Deadlift High Pull","Skull Crushers","Close-Grip Bench Press"].forEach(e=>exclude.add(e));
+    return exclude;
+  }
   // Pattern + explicit matches for home/hotel. Cardio exclusion differs: home drops everything,
   // hotel keeps Treadmill and Elliptical (common at hotel gyms).
   const cardioExcl=g==="hotel-basic"?CARDIO_MACHINE_EXERCISES_HOTEL:CARDIO_MACHINE_EXERCISES_HOME;
@@ -802,6 +816,7 @@ const EXERCISE_LIBRARY={
     "Recumbent Bike",
     "Jump Rope",
     "Stair Climber",
+    "Ski Erg",
     "Box Steps",
     "Burpees",
     "Mountain Climbers",
@@ -912,6 +927,60 @@ const UNILATERAL_EXERCISES=new Set([
   "Single-Leg Calf Raise","Single-Leg Romanian Deadlift",
   "Concentration Curl","Bulgarian Split Squat","Reverse Lunge","Dumbbell Lunge",
 ]);
+
+// === Module-level helpers so tests/regression.js can test the exact production code ===
+
+// hasAnyData: does this set carry user-logged work? Takes the parent exercise name so a stale
+// `weight: ""` key from a legacy LOG path doesn't disqualify a bodyweight exercise's reps-only save.
+// This is the second line of defense; the first is making bodyweight blankSet() omit the weight key
+// in the first place.
+function hasAnyData(s, exerciseName) {
+  const nz = v => v !== undefined && v !== null && v !== "" && Number(v) !== 0;
+  if (!s) return false;
+  if (s._pending) return false;
+  const isBW = exerciseName && BODYWEIGHT_EXERCISES.has(exerciseName);
+  // weighted: both weight and reps
+  if (nz(s.weight) && nz(s.reps)) return true;
+  // unilateral: at least one complete side
+  if ((nz(s.weightL) && nz(s.repsL)) || (nz(s.weightR) && nz(s.repsR))) return true;
+  // assisted: weight-field 0/bw plus reps counts as bodyweight; assist with reps counts
+  if (nz(s.assist) && nz(s.reps)) return true;
+  // bodyweight: reps alone — accepted when either (a) the set shape has no weight field, or
+  // (b) the exercise NAME is a known bodyweight exercise (handles legacy sets that still carry
+  // a stale `weight: ""` key from a pre-fix save path).
+  if (nz(s.reps) && (s.weight === undefined || isBW) && s.weightL === undefined && s.weightR === undefined && s.assist === undefined) return true;
+  // timed with rung or level: duration present
+  if ((s.rung !== undefined && s.rung !== "") && nz(s.duration)) return true;
+  if ((s.level !== undefined && s.level !== "") && (nz(s.duration) || nz(s.reps))) return true;
+  // plain timed — only when the set shape is purely a duration (no weight key defined)
+  if (nz(s.duration) && s.weight === undefined && (s.rung === undefined || s.rung === "") && (s.level === undefined || s.level === "")) return true;
+  // cardio
+  if (nz(s.duration) || nz(s.calories)) return true;
+  return false;
+}
+
+// parseCardioAiTarget: given an AI target string, decide whether cardio ✓ should fill the MIN box.
+// Returns { fill: boolean, minutes: number | null, refusalReason: string | null }.
+// Returns fill:false for rep-flavored targets ("15 reps") and bare numbers ("15") since the unit
+// is ambiguous. Only "sec" / "second" and "min" / "minute" trigger a fill.
+function parseCardioAiTarget(aiReps) {
+  const sr = (aiReps || "").toString();
+  const m = sr.match(/\d+(\.\d+)?/);
+  if (!m) return { fill: false, minutes: null, refusalReason: "no number" };
+  const num = Number(m[0]);
+  const hasReps = /\brep/i.test(sr);
+  const hasMin = /min/i.test(sr);
+  const hasSec = /sec/i.test(sr);
+  if (hasReps) return { fill: false, minutes: null, refusalReason: "reps-flavored" };
+  if (hasMin) return { fill: true, minutes: num, refusalReason: null };
+  if (hasSec) {
+    // Keep 2 decimals so 45 sec → 0.75 min (was 0.8 = 48s, off by 3s). Minor precision win per the
+    // 934380e code review's Should-fix #1.
+    const minutes = Math.round((num / 60) * 100) / 100;
+    return { fill: true, minutes, refusalReason: null };
+  }
+  return { fill: false, minutes: null, refusalReason: "bare number — unit ambiguous" };
+}
 
 const css=`
   :root{--bg:#0a0a0a;--surface:#131313;--surface2:#1c1c1c;--border:#2a2a2a;--accent:#c8f135;--accent2:#ff5c35;--text:#f0f0f0;--muted:#666;--danger:#ff3535;}
@@ -1531,6 +1600,20 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       try{window.alert(msg);}catch(e){}
       return;
     }
+    // Cardio refusal nudge: blank cardio row + AI target that can't safely fill (reps-flavored or
+    // bare number). Show WHY instead of a silent no-op.
+    if(isCardio&&target&&!hasAnyTyped(target)&&sr){
+      const r=parseCardioAiTarget(sr);
+      if(!r.fill){
+        const why=r.refusalReason==="reps-flavored"
+          ?`AI target "${sr}" is a rep count — not a time. Type the actual minutes you ran.`
+          :r.refusalReason==="bare number — unit ambiguous"
+          ?`AI target "${sr}" has no unit — could be seconds, minutes, or reps. Type the actual minutes.`
+          :`AI target "${sr}" can't fill the MIN box automatically — type it in.`;
+        try{window.alert(why);}catch(e){}
+        return;
+      }
+    }
     onChange({...exercise,sets:exercise.sets.map(s=>{
       if(s.id!==id)return s;
       // Already-typed values: just lock in by clearing pending.
@@ -1541,26 +1624,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
       // Timed exercises (Plank, Dead Hang, etc.): fill duration from parsed seconds.
       if(isTimed)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
-      // Cardio: fill the MIN box, but only when the AI target is clearly a time (contains "min",
-      // "sec", "second", or "minute"). A rep-flavored target ("15 reps" for Burpees) or a bare
-      // number of unclear unit is REFUSED — the user types the real value. "sec" converts to min
-      // rounded to 0.1 so Jump Rope "60 sec" fills as 1 min.
+      // Cardio: fillable targets handled above; non-fillable already returned early with an alert.
       if(isCardio){
-        if(!srSeconds)return s;
-        const hasReps=/\brep/i.test(sr);
-        const hasMin=/min/i.test(sr);
-        const hasSec=/sec/i.test(sr);
-        // Explicit reps = refuse to fill (wrong unit for cardio MIN).
-        if(hasReps)return s;
-        // Explicit minutes: use as-is.
-        if(hasMin)return{...s,duration:String(Number(srSeconds)),_pending:false};
-        // Explicit seconds: convert.
-        if(hasSec){
-          const minutes=Math.round((Number(srSeconds)/60)*10)/10;
-          return{...s,duration:String(minutes),_pending:false};
-        }
-        // Bare number: ambiguous — don't guess. User fills in the real value.
-        return s;
+        const r=parseCardioAiTarget(sr);
+        return r.fill?{...s,duration:String(r.minutes),_pending:false}:s;
       }
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
       if(isRung||isLevel)return s; // these need user-picked rung/level, can't auto-fill
@@ -2538,10 +2605,25 @@ function GymTracker(){
     const isTimed=TIMED_EXERCISES.has(name);
     const isRung=RUNG_EXERCISES.has(name);
     const isLevel=LEVEL_EXERCISES.has(name);
+    const isBW=BODYWEIGHT_EXERCISES.has(name);
+    const isAssist=ASSISTED_EXERCISES.has(name);
     const savedUrls=loadYoutubeUrls();
+    // Blank set shape MUST match the exercise type. Bodyweight exercises get NO weight key so the
+    // save-time hasAnyData() check accepts reps-only. Audit 934380e #1 fix: previously this path
+    // always wrote a weight:"" key, which caused Push-Ups to save as "partial" and get dropped.
+    const makeBlankSet=()=>{
+      if(isLevel)return isTimed?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""};
+      if(isRung)return{id:generateId(),rung:"",duration:""};
+      if(isCardio)return CARDIO_EXERCISES.has(name)?{id:generateId(),duration:""}:{id:generateId(),duration:"",resistance:""};
+      if(isTimed)return{id:generateId(),duration:""};
+      if(isAssist)return{id:generateId(),assist:"",reps:""};
+      if(isBW)return{id:generateId(),reps:""};
+      if(isUni)return{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""};
+      return{id:generateId(),weight:"",reps:""};
+    };
     setExercises(prev=>[...prev,{id:generateId(),name:name,muscle:muscle,
       youtubeUrl:savedUrls[name]||"",
-      sets:[isLevel?(isTimed?{id:generateId(),level:"",duration:""}:{id:generateId(),level:"",reps:""}):isRung?{id:generateId(),rung:"",duration:""}:isCardio?{id:generateId(),duration:"",resistance:""}:isTimed?{id:generateId(),duration:""}:isUni?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}:{id:generateId(),weight:"",reps:""}]}]);
+      sets:[makeBlankSet()]}]);
     setScanResult(null);
   };
   useEffect(()=>{
@@ -2583,29 +2665,9 @@ function GymTracker(){
     //   - Cardio: needs duration OR calories (level alone is incomplete)
     // Rung "0" and Level "0" still count as valid picks since 0 is a legitimate dial setting on some machines.
     const nz=v=>v!==undefined&&v!==null&&v!==""&&Number(v)!==0;
-    const hasAnyData=s=>{
-      // Pending copies from ADD SET — user hasn't touched them, so they don't count as logged work.
-      if(s._pending)return false;
-      // weighted: both weight and reps
-      if(nz(s.weight)&&nz(s.reps))return true;
-      // unilateral: at least one complete side
-      if((nz(s.weightL)&&nz(s.repsL))||(nz(s.weightR)&&nz(s.repsR)))return true;
-      // assisted: weight-field 0/bw plus reps counts as bodyweight; assist with reps counts
-      if(nz(s.assist)&&nz(s.reps))return true;
-      // bodyweight: reps alone — only when the set shape genuinely has no weight field.
-      // A weighted exercise's blankSet always includes a `weight: ""` key, so `weight === undefined`
-      // means "this set was authored as bodyweight-only." This stops a weighted exercise where
-      // the user cleared the weight from being saved as "– × N reps".
-      if(nz(s.reps)&&s.weight===undefined&&s.weightL===undefined&&s.weightR===undefined&&s.assist===undefined)return true;
-      // timed with rung or level: duration present
-      if((s.rung!==undefined&&s.rung!=="")&&nz(s.duration))return true;
-      if((s.level!==undefined&&s.level!=="")&&(nz(s.duration)||nz(s.reps)))return true;
-      // plain timed — only when the set shape is purely a duration (no weight key defined)
-      if(nz(s.duration)&&s.weight===undefined&&(s.rung===undefined||s.rung==="")&&(s.level===undefined||s.level===""))return true;
-      // cardio
-      if(nz(s.duration)||nz(s.calories))return true;
-      return false;
-    };
+    // Uses the module-level hasAnyData (defined just below BODYWEIGHT_EXERCISES) so tests exercise
+    // the SAME function the app runs. Passing the parent exercise name lets a bodyweight exercise
+    // save reps-only even if a stale `weight: ""` key leaked in from a legacy set path.
     // For unilateral sets, zero out the empty side so HISTORY doesn't display R:–lb×–
     const stripIncompleteSide=s=>{
       const out={...s};
@@ -2620,16 +2682,39 @@ function GymTracker(){
     // never meant to log it. Rows with typed content, OR an unconfirmed copied row that still carries
     // numbers, both earn a mention so the user sees exactly what's leaving.
     const anyTyped=s=>Object.keys(s).some(k=>k!=="id"&&k!=="_pending"&&s[k]!==undefined&&s[k]!=="");
-    const droppedSetNotes=[];
+    // Split dropped rows into two piles so the save prompt can treat them differently.
+    // Copied-not-confirmed rows aren't "partial" — the user clearly meant to log something, they
+    // just forgot the ✓. We offer a dedicated "Save as logged?" prompt for those first.
+    let localExercises=exercises;
+    const copiedUnconfirmed=[];
     exercises.forEach(ex=>{
       (ex.sets||[]).forEach((s,i)=>{
-        if(hasAnyData(s))return;
+        if(hasAnyData(s,ex.name))return;
         if(!anyTyped(s))return;
-        const label=`${ex.name||"exercise"} set ${i+1}`;
-        droppedSetNotes.push(s._pending?`${label} (copied, not confirmed)`:label);
+        if(s._pending)copiedUnconfirmed.push({exId:ex.id,setId:s.id,label:`${ex.name||"exercise"} set ${i+1}`});
       });
     });
-    const withCleanedSets=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
+    if(copiedUnconfirmed.length>0){
+      const list=copiedUnconfirmed.map(c=>c.label).join(", ");
+      const noun=copiedUnconfirmed.length===1?"copied set":"copied sets";
+      const choice=window.confirm(`${copiedUnconfirmed.length} ${noun} not confirmed with ✓:\n  ${list}\n\nTap OK to save them as-is, or Cancel to drop them.`);
+      if(choice){
+        // Promote the pending flag off so hasAnyData accepts them.
+        const promoted=new Set(copiedUnconfirmed.map(c=>c.setId));
+        localExercises=exercises.map(ex=>({...ex,sets:(ex.sets||[]).map(s=>promoted.has(s.id)?{...s,_pending:false}:s)}));
+      }
+    }
+    const droppedSetNotes=[];
+    localExercises.forEach(ex=>{
+      (ex.sets||[]).forEach((s,i)=>{
+        if(hasAnyData(s,ex.name))return;
+        if(!anyTyped(s))return;
+        // Pending rows the user already declined above are dropped silently (they said Cancel).
+        if(s._pending)return;
+        droppedSetNotes.push(`${ex.name||"exercise"} set ${i+1}`);
+      });
+    });
+    const withCleanedSets=localExercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(s=>hasAnyData(s,ex.name)).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
     const droppedExerciseNames=withCleanedSets.filter(ex=>ex.sets.length===0).map(ex=>ex.name).filter(Boolean);
     const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
@@ -3213,14 +3298,14 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                   return(
                     <div key={ex.id}>
                       {isNewGroup&&ex.superset&&!isFinisher&&(
-                        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:3,color:"var(--accent)",textTransform:"uppercase",margin:"14px 0 6px",display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:3,color:"var(--accent)",textTransform:"uppercase",margin:"14px 0 6px",display:"flex",alignItems:"center",gap:8}}>
                           <span>Superset {ex.superset}</span>
                           <span style={{flex:1,borderTop:"1px solid var(--border)"}}/>
                           <span style={{color:"var(--muted)"}}>A then B, no rest between</span>
                         </div>
                       )}
                       {isNewGroup&&isFinisher&&(
-                        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:3,color:"var(--accent2)",textTransform:"uppercase",margin:"14px 0 6px",display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:3,color:"var(--accent2)",textTransform:"uppercase",margin:"14px 0 6px",display:"flex",alignItems:"center",gap:8}}>
                           <span>🔥 FINISHER</span>
                           <span style={{flex:1,borderTop:"1px solid var(--border)"}}/>
                           <span style={{color:"var(--muted)"}}>spike your heart rate</span>
@@ -3517,7 +3602,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p">The <b>LVL</b> button in the top header switches between three modes: <b>LVL1</b> (standard AI-driven workouts), <b>LVL2</b> (high-intensity AI-driven workouts), and <b>LVL3</b> (circuit workouts built from your video library, no AI). The nav updates to show what's relevant to the current mode.</div>
 
             <div className="section-label">★ Set Up Your Profile First</div>
-            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}>Tap the <b>👤</b> icon in the header to tell the AI about <b>you</b>: priority muscle group, dominant side, grip strength, arm length, dumbbell max, progression preferences, and freeform notes. All fields are optional, defaults are neutral — but the AI's plans get much better once you fill this in. <b>Do this before generating your first AI workout.</b></div>
+            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}>Tap the <b>👤</b> icon in the header to tell the AI about <b>you</b>: gym type, priority muscle group, dominant side, dumbbell max, bodyweight, session time budget, progression preferences, and freeform notes. All fields are optional, defaults are neutral — but the AI's plans get much better once you fill this in. <b>Do this before generating your first AI workout.</b></div>
 
             <div className="section-label">Getting Started (LVL1)</div>
             <div className="help-p"><b>1.</b> Tap <b>👤</b> and set up your profile (above). Takes under a minute.</div>
