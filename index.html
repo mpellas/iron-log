@@ -33,6 +33,40 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
+// === REGRESSION GUARDS (invariants that broke in past audits — do not undo without tests) ===
+//
+// 1. hasAnyData: a weighted-exercise set with weight="" and reps=N must DROP, not keep as BW.
+//    Required test: {weight:"",reps:"8"} → false. Push-Ups {reps:"8"} (no weight key) → true.
+//
+// 2. blankSet() for bodyweight exercises MUST NOT include a weight key. Same for parseEx.
+//    (Audit 54e8ceb #1: Push-Ups dropped on save when weight="" existed on the set.)
+//
+// 3. Cardio ✓ MUST NOT auto-fill when the AI target is reps-flavored or a bare number.
+//    Required: aiReps="15 reps" → no fill. aiReps="60 sec" → fill 1 min. aiReps="5 min" → fill 5 min.
+//    aiReps="5" (bare) → no fill.
+//
+// 4. L/R uni history: empty side must be undefined (not "—"), so the LAST-line formatter can skip it.
+//    Required: a one-side-only set renders as "L25×10" (no R segment), not "L25×10/R—×—".
+//
+// 5. Save warning MUST name pending copied rows that still carry numbers.
+//    Required: {weight:"100",reps:"8",_pending:true} → "exercise set N (copied, not confirmed)".
+//
+// 6. Mountain Climbers MUST stay in CARDIO_EXERCISES only. Having it also in TIMED_EXERCISES
+//    routes "40 seconds" through the sec field but saves as "40min" via cardio defaults.
+//
+// 7. matchesAi suppresses "below last" when the typed value equals the AI target. Needed because
+//    a planned deload at 45 shouldn't show "below last: 45lb" when the user types 45.
+//
+// 8. Cardio equipment on gym type change: always UNION pruned-current with new-type-defaults so
+//    switching never leaves the picker missing common items (home→commercial restores Treadmill etc.).
+//
+// 9. Grip/arm fields: no longer rendered, no longer in buildUserContextFromProfile, no longer in
+//    supersetRules. Stored values on legacy profiles are preserved on spread but ignored.
+//
+// 10. Bodyweight clear path: saving profile.bodyweight=0 must REMOVE the ironlog:bodyweight key
+//     and also strip it from the AI's progression calcs (actualLoad only computes if bw>0).
+//
+// === END REGRESSION GUARDS ===
 const {useState,useEffect,useRef} = React;
 
 function loadHistory(){try{return JSON.parse(localStorage.getItem("ironlog:history")||"[]");}catch{return[];}}
@@ -131,8 +165,8 @@ const DEFAULT_PROFILE={
   priorityMuscle:"",
   dumbbellMax:75,
   dominantSide:"none",      // "none" | "right" | "left"
-  gripStrength:"average",   // "weak" | "average" | "strong"
-  armLength:"average",      // "short" | "average" | "long"
+  // gripStrength / armLength were removed from the UI and the AI prompt. Any stored values in a
+  // legacy profile are preserved on spread, but nothing reads them.
   inclinePreference:false,  // if true, AI defaults bench to incline
   compoundIncrement:5,      // lb to add when all reps completed
   isolationIncrement:2.5,   // lb to add when all reps completed
@@ -1507,14 +1541,26 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
       // Timed exercises (Plank, Dead Hang, etc.): fill duration from parsed seconds.
       if(isTimed)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
-      // Cardio: fill the MIN box with the AI target, converting seconds to minutes when the target
-      // string explicitly says "sec" ("45 sec" → 0.75 min, rounded to 1 decimal). A bare number is
-      // treated as minutes already (so "5" means 5 min).
+      // Cardio: fill the MIN box, but only when the AI target is clearly a time (contains "min",
+      // "sec", "second", or "minute"). A rep-flavored target ("15 reps" for Burpees) or a bare
+      // number of unclear unit is REFUSED — the user types the real value. "sec" converts to min
+      // rounded to 0.1 so Jump Rope "60 sec" fills as 1 min.
       if(isCardio){
         if(!srSeconds)return s;
-        const isSec=/sec/i.test(sr);
-        const minutes=isSec?(Math.round((Number(srSeconds)/60)*10)/10):Number(srSeconds);
-        return{...s,duration:String(minutes),_pending:false};
+        const hasReps=/\brep/i.test(sr);
+        const hasMin=/min/i.test(sr);
+        const hasSec=/sec/i.test(sr);
+        // Explicit reps = refuse to fill (wrong unit for cardio MIN).
+        if(hasReps)return s;
+        // Explicit minutes: use as-is.
+        if(hasMin)return{...s,duration:String(Number(srSeconds)),_pending:false};
+        // Explicit seconds: convert.
+        if(hasSec){
+          const minutes=Math.round((Number(srSeconds)/60)*10)/10;
+          return{...s,duration:String(minutes),_pending:false};
+        }
+        // Bare number: ambiguous — don't guess. User fills in the real value.
+        return s;
       }
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
       if(isRung||isLevel)return s; // these need user-picked rung/level, can't auto-fill
@@ -1602,13 +1648,21 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           ))}
         </div>
       )}
-      {exercise.aiWeight&&!isTimed&&(
-        <div style={{marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
-            AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
+      {exercise.aiWeight&&!isTimed&&(()=>{
+        // Deload badge: AI target below the user's last peak = planned deload. Explain it so the
+        // user doesn't think the AI made a mistake and bump the weight back up.
+        const peak=getLastSessionMaxWeight(exercise.name,history);
+        const aiW=Number(exercise.aiWeight);
+        const isDeload=peak>0&&!isNaN(aiW)&&aiW<peak;
+        return(
+          <div style={{marginTop:6,marginBottom:2}}>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+              AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
+            </div>
+            {isDeload&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"#e8a13a",letterSpacing:0.5,marginTop:2,lineHeight:1.3}}>↓ DELOAD — down from last peak {peak}lb to rebuild. This is intentional.</div>}
           </div>
-        </div>
-      )}
+        );
+      })()}
       {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}if(last.type==="cardio"){const parts=last.sets.map(s=>{const segs=[];if(s.dur)segs.push(`${s.dur}min`);if(s.lvl)segs.push(`lv${s.lvl}`);if(s.cal)segs.push(`${s.cal}cal`);return segs.join(" · ")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {isTimed&&exercise.aiReps&&(
         <div style={{marginTop:6,marginBottom:2}}>
@@ -1624,13 +1678,23 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           </div>
         </div>
       )}
-      {isCardio&&!isTimed&&exercise.aiReps&&(
-        <div style={{marginTop:6,marginBottom:2}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
-            AI TARGET: {exercise.aiReps}{/\d/.test(exercise.aiReps)&&!/[a-z]/i.test(exercise.aiReps)?" sec":""} · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ to fill</span>
+      {isCardio&&!isTimed&&exercise.aiReps&&(()=>{
+        const target=String(exercise.aiReps||"");
+        const hasReps=/\brep/i.test(target);
+        const hasMin=/min/i.test(target);
+        const hasSec=/sec/i.test(target);
+        // ✓ only fills when the AI target carries a time unit. For reps, user types the real
+        // interval length — we don't guess reps→minutes mapping.
+        const canFill=hasMin||hasSec;
+        const hint=canFill?"tap ✓ to fill MIN":hasReps?"type MIN × optional lvl × cal to log the interval":"type the interval in MIN";
+        return(
+          <div style={{marginTop:6,marginBottom:2}}>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+              AI TARGET: {target} · <span style={{color:"var(--muted)",letterSpacing:0.5}}>{hint}</span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
@@ -2922,7 +2986,7 @@ ACTIVE REST (between each superset pair):
 ${intensity===2?`
 CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
 - Exactly ONE of the ${pairCount} superset pairs must be a conditioning pair where BOTH A and B are high-intensity bodyweight movements
-- Examples: Burpees + Mountain Climbers, Jumping Jacks + High Knees, Box Steps + High Knees
+- Examples: Burpees + Jumping Jacks, Jumping Jacks + High Knees, Box Steps + High Knees
 - Label this pair's pairNote as "CONDITIONING PAIR — max effort"
 - This pair uses restSeconds=40 same as others`:""}
 
