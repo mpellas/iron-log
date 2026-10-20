@@ -193,21 +193,8 @@ function buildUserContextFromProfile(p){
     lines.push("- For bilateral exercises the tip should say: start with RIGHT side first, match on left.");
   }
   if(p.inclinePreference)lines.push("- For dumbbell press variations the user PREFERS INCLINE — default to incline (30-45°) unless flat is specifically more appropriate; always state the angle in the tip.");
-  if(p.armLength==="long"){
-    lines.push("- LONG ARMS. Mechanics implications:");
-    lines.push("  * Bench press: longer ROM, more shoulder stress — cue elbows at 45-75°, not flared");
-    lines.push("  * Rows: take advantage of full ROM at the stretched bottom position");
-    lines.push("  * Overhead press: harder lockout — cue to avoid hyperextending at top");
-    lines.push("  * Dips/Pushdowns: watch elbow stress, don't lock out aggressively");
-  } else if(p.armLength==="short"){
-    lines.push("- SHORT ARMS. Mechanics implications: pressing ROM is shorter and generally more favorable; rowing ROM needs attention to full stretch.");
-  }
-  if(p.gripStrength==="weak"){
-    lines.push("- WEAK GRIP that the user is actively building.");
-    lines.push("- ALWAYS include at least one forearm or grip exercise in the FINISHER (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, Zottman Curl). Place grip work at END only — never in supersets that would pre-fatigue grip for main lifts.");
-  } else if(p.gripStrength==="strong"){
-    lines.push("- Grip is strong; no special grip finisher required.");
-  }
+  // Grip strength and arm length were removed from the Profile UI; the lines they emitted into the
+  // AI prompt go with them. If a legacy profile still has non-default values, they're ignored.
   const budget=parseInt(p.sessionTimeBudget||0)||0;
   if(budget>0){
     lines.push(`- TIME BUDGET: user has ~${budget} minutes for the whole session (warm-up to finisher). Size the plan to fit: fewer superset pairs if budget is tight (3 pairs for <30 min, 4 for 30-45 min, 5 for 45+ min), and shorten the finisher to ${budget<30?"3":"4"} exercises if the budget is under 45 min. Keep rest periods tight.`);
@@ -460,7 +447,11 @@ function getLastLoggedDetail(name,history){
     if(rng.length)return{type:"rung",sets:rng.map(s=>({rung:s.rung,dur:s.duration}))};
     const tmd=ex.sets.filter(s=>s.duration&&s.rung===undefined&&s.weight===undefined&&s.weightL===undefined);
     if(TIMED_EXERCISES.has(name)&&tmd.length)return{type:"timed",sets:tmd.map(s=>({dur:s.duration}))};
-    if(uni.length)return{type:"uni",sets:uni.map(s=>({L:s.weightL||"—",R:s.weightR||"—",rL:s.repsL||"—",rR:s.repsR||"—"}))};
+    // Store undefined (not "—") for empty sides so the LAST-line formatter can drop them cleanly.
+    if(uni.length)return{type:"uni",sets:uni.map(s=>({
+      L:s.weightL||undefined,R:s.weightR||undefined,
+      rL:s.repsL||undefined,rR:s.repsR||undefined
+    }))};
     if(ast.length)return{type:"assist",sets:ast.map(s=>({assist:s.assist||"0",reps:s.reps}))};
     if(bil.length)return{type:"bil",sets:bil.map(s=>({weight:s.weight,reps:s.reps}))};
     // Cardio: duration + optional resistance + optional calories. Showed as "15min · lv5 · 140cal".
@@ -557,6 +548,12 @@ function buildGymExclusionSet(gymType,library){
 }
 const EXERCISE_LIBRARY={
   Chest:[
+    // Barbell variants listed first so commercial gyms land on the barbell by default; Smith Machine
+    // substitution is handled by GYM_ONLY_EXPLICIT excluding barbells for Planet Fitness / home / hotel.
+    "Barbell Bench Press",
+    "Barbell Incline Bench Press",
+    "Barbell Decline Bench Press",
+    "Close-Grip Bench Press",
     "Smith Machine Bench Press",
     "Smith Machine Incline Press",
     "Smith Machine Decline Press",
@@ -581,8 +578,11 @@ const EXERCISE_LIBRARY={
     "TRX Chest Press"
   ],
   Back:[
+    "Barbell Deadlift",
+    "Barbell Row",
     "Sumo Deadlift",
     "Romanian Deadlift",
+    "Barbell Romanian Deadlift",
     "Single-Arm Dumbbell Row",
     "Dumbbell Deadlift",
     "Dumbbell Pullover",
@@ -611,6 +611,8 @@ const EXERCISE_LIBRARY={
     "TRX Row"
   ],
   Shoulders:[
+    "Barbell Overhead Press",
+    "Barbell Upright Row",
     "Dumbbell Overhead Press",
     "Single-Arm Dumbbell Press",
     "Lateral Raises",
@@ -634,7 +636,11 @@ const EXERCISE_LIBRARY={
     "TRX Y-Fly"
   ],
   Biceps:[
+    "Barbell Curl",
+    "Barbell Preacher Curl",
     "EZ-Bar Curl",
+    "EZ-Bar Preacher Curl",
+    "Reverse Barbell Curl",
     "Dumbbell Curl",
     "Single-Arm Dumbbell Curl",
     "Hammer Curl",
@@ -691,6 +697,8 @@ const EXERCISE_LIBRARY={
     "Machine Wrist Roller"
   ],
   Legs:[
+    "Barbell Squat",
+    "Barbell Lunge",
     "Smith Machine Squat",
     "Smith Machine Lunge",
     "Smith Machine Romanian Deadlift",
@@ -760,7 +768,6 @@ const EXERCISE_LIBRARY={
     "Recumbent Bike",
     "Jump Rope",
     "Stair Climber",
-    "Arc Trainer",
     "Box Steps",
     "Burpees",
     "Mountain Climbers",
@@ -832,7 +839,8 @@ const BODYWEIGHT_EXERCISES=new Set([
 ]);
 
 const TIMED_EXERCISES=new Set([
-  "Mountain Climbers","Plank","Side Plank","Plank Hold","Dead Hang","Farmer's Carry",
+  // Mountain Climbers removed — handled as CARDIO (min/level/cal) only, not timed-seconds.
+  "Plank","Side Plank","Plank Hold","Dead Hang","Farmer's Carry",
   "Wall Sit","Hollow Body Hold","Superman Hold","L-Sit",
   "TRX Plank",
   "PF360 Pushup + Climber",
@@ -1043,7 +1051,7 @@ const css=`
   .session-timer-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);}
   .session-timer-value{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;line-height:1.1;}
   .session-timer-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
-  .session-timer-btn{padding:8px 12px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text);}
+  .session-timer-btn{padding:12px 14px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text);min-height:44px;}
   .session-timer-btn.stop{border-color:var(--danger);color:var(--danger);}
   .session-timer-btn.rest{border-color:var(--accent2);color:var(--accent2);}
   .session-timer-btn.reset{border-color:var(--border);color:var(--muted);}
@@ -1056,8 +1064,9 @@ const css=`
   .profile-field{margin-bottom:12px;}
   .profile-field-row{display:flex;gap:10px;}
   .profile-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
-  .profile-input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:8px 10px;}
+  .profile-input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:12px 10px;min-height:44px;text-overflow:ellipsis;}
   .profile-input:focus{outline:none;border-color:var(--accent);}
+  select.profile-input{text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
   .profile-check-row{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
   .profile-check-row input{width:16px;height:16px;cursor:pointer;}
   .profile-section-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:16px 0 10px;padding-top:12px;border-top:1px solid var(--border);}
@@ -1105,10 +1114,10 @@ function ProfileModal({profile,onSave,onClose,onReset}){
         <div className="profile-field">
           <label className="profile-label">Gym type (shapes AI equipment choices)</label>
           <select className="profile-input" value={p.gymType||"commercial"} onChange={e=>upd("gymType",e.target.value)}>
-            <option value="commercial">Full commercial gym (barbells, machines, cables, everything)</option>
-            <option value="planet-fitness">Planet Fitness (Smith machines, no free barbells)</option>
-            <option value="home">Home gym (dumbbells + bodyweight)</option>
-            <option value="hotel-basic">Hotel / basic gym (minimal equipment)</option>
+            <option value="commercial">Full commercial</option>
+            <option value="planet-fitness">Planet Fitness</option>
+            <option value="home">Home gym</option>
+            <option value="hotel-basic">Hotel / basic</option>
           </select>
         </div>
 
@@ -1258,15 +1267,15 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
     </div>
   );
   if(isCardio)return(
-    <div className="set-row" style={{flexWrap:"wrap",gap:6}}>
-      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:60,maxWidth:90,flex:"0 1 70px"}}/>
-      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>MIN</span>
+    <div className="set-row" style={{flexWrap:"wrap",gap:4}}>
+      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:52,maxWidth:70,flex:"0 1 56px",padding:"10px 4px"}}/>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>MIN</span>
       {!noResistance&&<>
-        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:60,maxWidth:80,flex:"0 1 60px"}}/>
-        <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>LEVEL</span>
+        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:48,maxWidth:60,flex:"0 1 52px",padding:"10px 4px"}}/>
+        <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>LVL</span>
       </>}
-      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:60,maxWidth:90,flex:"0 1 70px"}}/>
-      <span className="set-label" style={{fontSize:12,lineHeight:1.2}}>CAL</span>
+      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:52,maxWidth:70,flex:"0 1 56px",padding:"10px 4px"}}/>
+      <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>CAL</span>
       {checkBtn}
       <button className="btn btn-danger" onClick={onRemove}>✕</button>
     </div>
@@ -1423,6 +1432,12 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     ?{id:generateId(),duration:""}
     :isCardio
     ?CARDIO_EXERCISES.has(exercise.name)?{id:generateId(),duration:""}:{id:generateId(),duration:"",resistance:""}
+    :isAssisted
+    ?{id:generateId(),assist:"",reps:""}
+    // Bodyweight exercises: NO weight key at all so hasAnyData's shape check accepts a reps-only save.
+    // Push-Ups, Pull-Ups, etc. don't have a weight input; the set must not carry a stale "" weight.
+    :isBodyweight
+    ?{id:generateId(),reps:""}
     :isUnilateral
     ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
     :{id:generateId(),weight:"",reps:""};
@@ -1437,7 +1452,8 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
     // Check if last set has any data to copy. If it's empty, don't add another empty duplicate.
     const lastHasData=Object.keys(last).some(k=>k!=="id"&&k!=="_pending"&&last[k]!==undefined&&last[k]!=="");
     if(!lastHasData){
-      try{window.alert("Fill in the current set before adding another. ADD SET copies the last filled row so you can tweak it.");}catch(e){}
+      const label=isCardio?"interval":"set";
+      try{window.alert(`Fill in the current ${label} before adding another. ADD ${label.toUpperCase()} copies the last filled row so you can tweak it.`);}catch(e){}
       return;
     }
     const copy={...last,id:generateId(),_pending:true};
@@ -1461,10 +1477,24 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isLevel)return !!(s.level||s.reps||s.duration);
       return !!(s.weight||s.reps);
     };
-    // Nothing to fill AND nothing typed → refuse with a short nudge, so the tap isn't silent.
+    // Nothing to fill AND nothing typed → refuse with a short nudge, worded for the row's type,
+    // so the tap isn't silent.
     const target=exercise.sets.find(s=>s.id===id);
     if(target&&!hasAnyTyped(target)&&!sw&&!sr){
-      try{window.alert("Type weight × reps first, then tap ✓ to confirm. (Or wait for an AI target to fill a blank row.)");}catch(e){}
+      const msg=isCardio
+        ?"Type minutes (and optional level / calories) first, then tap ✓ to confirm."
+        :isTimed
+        ?"Type seconds first, then tap ✓ to confirm."
+        :isRung
+        ?"Pick a rung and seconds first, then tap ✓ to confirm."
+        :isLevel
+        ?"Pick a level and reps/seconds first, then tap ✓ to confirm."
+        :isBodyweight
+        ?"Type reps first, then tap ✓ to confirm."
+        :isAssisted
+        ?"Type assist weight × reps first, then tap ✓ to confirm."
+        :"Type weight × reps first, then tap ✓ to confirm. (Or wait for an AI target to fill a blank row.)";
+      try{window.alert(msg);}catch(e){}
       return;
     }
     onChange({...exercise,sets:exercise.sets.map(s=>{
@@ -1477,9 +1507,15 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       if(isUnilateral)return{...s,weightL:sw,weightR:sw,repsL:sr,repsR:sr,_pending:false};
       // Timed exercises (Plank, Dead Hang, etc.): fill duration from parsed seconds.
       if(isTimed)return srSeconds?{...s,duration:srSeconds,_pending:false}:s;
-      // Cardio: unit of aiReps is ambiguous ("30" could be sec or min, "15" is reps for Burpees).
-      // Don't auto-fill — too easy to put a seconds value into the MIN box. User types instead.
-      if(isCardio)return s;
+      // Cardio: fill the MIN box with the AI target, converting seconds to minutes when the target
+      // string explicitly says "sec" ("45 sec" → 0.75 min, rounded to 1 decimal). A bare number is
+      // treated as minutes already (so "5" means 5 min).
+      if(isCardio){
+        if(!srSeconds)return s;
+        const isSec=/sec/i.test(sr);
+        const minutes=isSec?(Math.round((Number(srSeconds)/60)*10)/10):Number(srSeconds);
+        return{...s,duration:String(minutes),_pending:false};
+      }
       if(isBodyweight||isAssisted)return{...s,reps:sr,_pending:false};
       if(isRung||isLevel)return s; // these need user-picked rung/level, can't auto-fill
       return{...s,weight:sw,reps:sr,_pending:false};
@@ -1588,6 +1624,13 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           </div>
         </div>
       )}
+      {isCardio&&!isTimed&&exercise.aiReps&&(
+        <div style={{marginTop:6,marginBottom:2}}>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
+            AI TARGET: {exercise.aiReps}{/\d/.test(exercise.aiReps)&&!/[a-z]/i.test(exercise.aiReps)?" sec":""} · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ to fill</span>
+          </div>
+        </div>
+      )}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10,marginTop:6}}>
         {exercise.sets.map((set,i)=>(
           <div key={set.id}>
@@ -1610,7 +1653,9 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
 function HistoryItem({entry,onDelete}){
   const [open,setOpen]=useState(false);
   const [confirming,setConfirming]=useState(false);
-  const muscles=[...new Set(entry.exercises.map(e=>e.muscle))];
+  // Exclude Cardio from the muscle tags so the chip count matches the stats box ("2 MUSCLES"),
+  // which already excludes Cardio and Finisher. Cardio still shows via the exercise's own entry below.
+  const muscles=[...new Set(entry.exercises.map(e=>e.muscle).filter(m=>m&&m!=="Cardio"&&m!=="Finisher"))];
   return(
     <div className="history-entry">
       <div className="history-header" onClick={()=>!confirming&&setOpen(!open)}>
@@ -1661,7 +1706,7 @@ function HistoryItem({entry,onDelete}){
                     sets.filter(s=>s.duration||s.resistance||s.calories).forEach(s=>{
                       const parts=[];
                       if(s.duration)parts.push(`${s.duration}min`);
-                      if(s.resistance)parts.push(`lv ${s.resistance}`);
+                      if(s.resistance)parts.push(`lv${s.resistance}`);
                       if(s.calories)parts.push(`${s.calories}cal`);
                       chips.push(<span key={s.id} className="hist-set-chip">{parts.join(" · ")||"–"}</span>);
                     });
@@ -2190,13 +2235,25 @@ function GymTracker(){
   const cancelRestTimer=()=>{setRestTimer(null);};
   const [showCardioModal,setShowCardioModal]=useState(false);
   const [cardioEquipment,setCardioEquipment]=useState(()=>loadCardioEquipment());
-  // Re-prune the cardio equipment selection whenever gym type changes (user switched Home ↔ Commercial, etc.).
-  // Without this, a user who selected Arc Trainer at Commercial would still see it checked after
-  // switching to Home until the next full reload. Persist the pruned list too.
+  // Re-sync the cardio equipment selection whenever gym type changes. The rule is simple: start
+  // from the pruned current list, then union in the new gym type's defaults so switching never
+  // leaves the user with a picker that's missing the common items for their new gym.
+  const prevGymTypeRef=useRef(profile.gymType);
   useEffect(()=>{
+    const prev=prevGymTypeRef.current;
+    const next=profile.gymType;
+    if(prev===next)return;
+    prevGymTypeRef.current=next;
+    const defaultsFor=(gt)=>{
+      if(gt==="home")return["Jump Rope"];
+      if(gt==="hotel-basic")return["Treadmill","Elliptical","Jump Rope"];
+      if(gt==="planet-fitness")return["Treadmill","Bike","Elliptical","Stair Climber","Recumbent Bike"];
+      return["Treadmill","Bike","Elliptical","Stair Climber","Recumbent Bike"];
+    };
     const pruned=loadCardioEquipment();
-    setCardioEquipment(pruned);
-    saveCardioEquipment(pruned);
+    const merged=Array.from(new Set([...pruned,...defaultsFor(next)]));
+    setCardioEquipment(merged);
+    saveCardioEquipment(merged);
   },[profile.gymType]);
   const [intensityLevel,setIntensityLevel]=useState(()=>loadIntensityLevel());
   const [showDataModal,setShowDataModal]=useState(false);
@@ -2496,15 +2553,16 @@ function GymTracker(){
     };
     // Build a per-set audit: for each dropped set that had typed values, record exercise + index + why.
     // A fully cleared row (every value blank or 0 and not pending) is dropped silently — the user
-    // never meant to log it. Only rows with some typed content earn a warning.
+    // never meant to log it. Rows with typed content, OR an unconfirmed copied row that still carries
+    // numbers, both earn a mention so the user sees exactly what's leaving.
     const anyTyped=s=>Object.keys(s).some(k=>k!=="id"&&k!=="_pending"&&s[k]!==undefined&&s[k]!=="");
     const droppedSetNotes=[];
     exercises.forEach(ex=>{
       (ex.sets||[]).forEach((s,i)=>{
-        if(!hasAnyData(s)&&anyTyped(s)&&!s._pending){
-          // Partial — had typing but didn't survive the completeness check.
-          droppedSetNotes.push(`${ex.name||"exercise"} set ${i+1}`);
-        }
+        if(hasAnyData(s))return;
+        if(!anyTyped(s))return;
+        const label=`${ex.name||"exercise"} set ${i+1}`;
+        droppedSetNotes.push(s._pending?`${label} (copied, not confirmed)`:label);
       });
     });
     const withCleanedSets=exercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(hasAnyData).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
@@ -2591,9 +2649,12 @@ function GymTracker(){
         ?{id:generateId(),assist:"",reps:""}
         :TIMED_EXERCISES.has(ex.name||"")
           ?{id:generateId(),duration:""}
-          :isUni
-            ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
-            :{id:generateId(),weight:"",reps:""}
+          // Bodyweight: no weight key, so hasAnyData accepts reps-only on save.
+          :isBW
+            ?{id:generateId(),reps:""}
+            :isUni
+              ?{id:generateId(),weightL:"",weightR:"",repsL:"",repsR:""}
+              :{id:generateId(),weight:"",reps:""}
       )
     };
     }catch(e){console.error("parseEx error:",e,ex);return{id:generateId(),name:ex?.name||"Exercise",muscle:ex?.muscle||"",sets:[{id:generateId(),weight:"",reps:""}],aiWeight:"",aiReps:"",superset,supersetLabel,restSeconds,activeRest,youtubeUrl:""};}
@@ -2825,8 +2886,7 @@ SUPERSETS (${pairCount} pairs - A then B back-to-back no rest, then rest between
 - Pair opposing or complementary muscle groups
 - SESSION FOCUS: ${activeFocus} — this session emphasizes ${activeFocus==="Push"?"Chest, Shoulders, and Triceps (at least 3 push exercises)":activeFocus==="Pull"?"Back and Biceps (at least 3 pull exercises)":"Legs (at least 3 leg exercises)"}
 - No muscle group should be skipped entirely — always include at least 1 exercise from each of: Push muscles (Chest/Shoulders/Triceps), Pull muscles (Back/Biceps), Legs, Core
-- MUST include at least 1 core exercise${profile.gripStrength==="weak"?`
-- MUST include at least 1 forearm/grip exercise — place in the finisher only, never in supersets`:""}${profile.priorityMuscle?`
+- MUST include at least 1 core exercise${profile.priorityMuscle?`
 - ${profile.priorityMuscle} is a PRIORITY — user wants emphasis on ${profile.priorityMuscle}. Always include at least 1 ${profile.priorityMuscle} exercise regardless of focus day`:""}
 - WEIGHT PROGRESSION (CRITICAL — follow exactly): The progression data below shows each exercise with trend, action (INCREASE / HOLD / DELOAD), and a specific "USE: Xlb" target. You MUST use the "USE:" value for every exercise that has one. The three-way rule: all reps hit → add weight; missed reps once → hold at the same weight; missed reps TWO sessions in a row → deload by one increment (compound ${profile.compoundIncrement||5}lb / isolation ${profile.isolationIncrement||2.5}lb) so the user can rebuild. A deload is normal and healthy — do NOT refuse to go below the prior weight when the data says DELOAD. If no history exists: make a reasonable starting estimate based on the exercise type.
 - For unilateral exercises left and right are logged separately. Respect the user's dumbbell max from the USER CONTEXT above.
@@ -2869,7 +2929,6 @@ CONDITIONING SUPERSET (LEVEL 2 MANDATORY):
 FINISHER (${finisherMin}-min circuit to spike heart rate):
 - ${finisherExCount} exercises back-to-back with minimal rest
 - ${intensity===2?"LEVEL 2: Push hard — sprints, burpees, battle movements. Max effort throughout.":"Use cardio machines or bodyweight available at the user's gym (per USER CONTEXT above)."}
-${profile.gripStrength==="weak"?"- MUST include at least one forearm/grip exercise (Dead Hang, Farmer's Carry, Wrist Curls, Reverse Wrist Curls, or Zottman Curl) — place in the finisher at end of session only":""}
 
 Respond ONLY with valid JSON in this exact format (no other text):
 {"focus":"e.g. Push/Pull Day","rationale":"1-2 sentences why","supersets":[{"pair":1,"restSeconds":${intensity===2?40:60},"activeRest":"${intensity===2?"Treadmill sprint 40 sec":"cardio machine 60 sec moderate pace"}","a":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 135lb","tip":"coaching tip with weight rationale"},"b":{"name":"exact name from list","muscle":"exact group","sets":3,"reps":"8-12","weight":"e.g. 45lb","tip":"coaching tip"}}],"finisher":{"name":"${finisherMin}-Min Finisher","exercises":[{"name":"exact name from list","muscle":"exact group","duration":"40 sec","rest":"20 sec","tip":"tip"}]}}
@@ -2944,7 +3003,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="logo">90STRONG</div>
             <div className="logo-sub">Workout Tracker</div>
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-              <button className="header-key" style={{marginLeft:0,fontSize:10,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>{(profile.bodyweight||loadBodyweight())>0?`${Math.round(profile.bodyweight||loadBodyweight())} BW`:"BW"}</button>
+              <button className="header-key" style={{marginLeft:0,fontSize:12,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>{(()=>{const bw=profile.bodyweight||loadBodyweight();if(!bw||bw<=0)return"BW";const str=String(bw);return`${str} BW`;})()}</button>
               <button className="header-key" style={{marginLeft:0,fontSize:12,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===1?"var(--muted)":intensityLevel===2?"var(--accent)":"var(--accent2)",fontWeight:"bold"}} title={intensityLevel===1?"Mode: L1 Standard AI — tap to change":intensityLevel===2?"Mode: L2 High-Intensity AI — tap to change":"Mode: L3 Circuit (no AI) — tap to change"} onClick={()=>{const nl=intensityLevel===3?1:intensityLevel+1;const wasL3=intensityLevel===3;setIntensityLevel(nl);saveIntensityLevel(nl);if(nl===3)setTab("lvl3");else if(wasL3&&tab==="lvl3")setTab("log");}}>LVL{intensityLevel}</button>
               <button className="header-key" style={{marginLeft:0,opacity:playlists.length>0?1:0.35}} title="Playlists" onClick={()=>setShowPlaylistModal(true)}>🎵</button>
               <button className="header-key" style={{marginLeft:0}} title="Backup & Restore" onClick={()=>setShowDataModal(true)}>💾</button>
@@ -3104,7 +3163,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                         </div>
                       )}
                       {ex.superset&&!isFinisher&&(
-                        <div style={{fontFamily:"Bebas Neue",fontSize:12,color:ex.supersetLabel==="A"?"var(--accent)":"var(--muted)",letterSpacing:2,marginBottom:3}}>
+                        <div style={{fontFamily:"Bebas Neue",fontSize:14,color:ex.supersetLabel==="A"?"var(--accent)":"var(--muted)",letterSpacing:2,marginBottom:3}}>
                           {ex.supersetLabel==="A"?"A — DO FIRST":"B — DO SECOND"}
                         </div>
                       )}
@@ -3379,7 +3438,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
             <div className="help-p">90Strong is a personal gym-tracking web app originally built for one lifter and opened up for anyone who wants to try it. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
 
-            <div className="help-p">It's built around a specific way of training: variety over rigid programs, honest tracking of what you actually lifted, and quick logging that doesn't get in the way mid-workout. Pick your gym type in the profile (full commercial, Planet Fitness, home, or hotel/basic) and the AI tailors its recommendations to the equipment you actually have. The exercise library also includes niche gear the author uses — the PF360 rig, Elevate Core machine, TRX straps, and the TRUE Stretch cage — safe to ignore if your gym doesn't have them.</div>
+            <div className="help-p">It's built around a specific way of training: variety over rigid programs, honest tracking of what you actually lifted, and quick logging that doesn't get in the way mid-workout. Pick your gym type in the profile (full commercial, Planet Fitness, home, or hotel/basic) and the AI tailors its recommendations to the equipment you actually have.{profile.gymType==="planet-fitness"?" The exercise library also includes Planet Fitness-branded gear — the PF360 rig, Elevate Core machine, TRX straps, and the TRUE Stretch cage.":""}</div>
 
             <div className="section-label">What's Inside</div>
             <div className="help-p"><b>HELP</b> — how to use each part</div>
@@ -3408,7 +3467,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="section-label">A Few Things Worth Knowing</div>
             <div className="help-p">Your data lives in your browser on the device you're using, so it's a good idea to back up regularly via the <b>💾</b> Export button in the header.</div>
             <div className="help-p">The AI features use your own Anthropic API key (typically a few cents per generated plan). Everything else is free.</div>
-            <div className="help-p">Tap <b>👤</b> in the header to tune the AI to <b>you</b> — priority muscle, dominant side, grip strength, dumbbell max, preferred progression increments, and freeform notes. All fields optional; defaults are neutral.</div>
+            <div className="help-p">Tap <b>👤</b> in the header to tune the AI to <b>you</b> — priority muscle, dominant side, dumbbell max, bodyweight, session time budget, preferred progression increments, and freeform notes. All fields optional; defaults are neutral.</div>
             <div className="help-p">Videos play inline where the YouTube creator has enabled embedding — most do, occasionally one won't.</div>
 
             <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>Built as a personal project · Feedback welcome · Polish is ongoing</div>
@@ -3421,7 +3480,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
             <div className="section-label">Getting Started</div>
             <div className="help-p">Tap <b>LOG</b> to record a session from scratch, or <b>AI REC</b> to have Claude build one for you based on what you've done recently. Everything you log is saved on your device automatically — no account, no cloud, no sign-in.</div>
-            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}><b>★ First time? Tap the 👤 icon</b> in the header and fill in your profile — priority muscle, dominant side, grip strength, arm length, dumbbell max. The AI uses this to tune its recommendations. Takes under a minute, and plans get noticeably better.</div>
+            <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}><b>★ First time? Tap the 👤 icon</b> in the header and fill in your profile — gym type, priority muscle, dominant side, dumbbell max, bodyweight. The AI uses this to tune its recommendations. Takes under a minute, and plans get noticeably better.</div>
             <div className="help-p">Also handy on first run: open <b>⚙</b> to paste an Anthropic API key (if you want AI plans — otherwise tap SKIP), and <b>BW</b> to enter your bodyweight (so assisted machines can calculate your real load).</div>
 
             <div className="section-label">The Main Tabs</div>
@@ -3441,10 +3500,14 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
             <div className="section-label">Special Equipment</div>
             <div className="help-p"><b>TRX straps</b> log as bodyweight × reps. Progress by walking your feet forward for a harder angle.</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:4,marginBottom:8,fontStyle:"italic"}}>The three items below are Planet Fitness-specific. Skip them unless your gym has them.</div>
-            <div className="help-p"><b>PF360 rig</b> (Pushup + Climber) logs as rung × seconds. <i>Lower rung = harder.</i></div>
-            <div className="help-p"><b>Elevate Core machine</b> logs as level (1–7) × seconds (Dynamic Plank) or level × reps (Scrunch). Higher level = harder.</div>
-            <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
+            {profile.gymType==="planet-fitness"&&(
+              <>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:4,marginBottom:8,fontStyle:"italic"}}>The three items below are Planet Fitness-specific.</div>
+                <div className="help-p"><b>PF360 rig</b> (Pushup + Climber) logs as rung × seconds. <i>Lower rung = harder.</i></div>
+                <div className="help-p"><b>Elevate Core machine</b> logs as level (1–7) × seconds (Dynamic Plank) or level × reps (Scrunch). Higher level = harder.</div>
+                <div className="help-p"><b>TRUE Stretch cage</b> logs as timed seconds only. Ten stretch options, plus a whole-routine entry.</div>
+              </>
+            )}
 
             <div className="section-label">Combos</div>
             <div className="help-p">A combo is a chain of movements done back-to-back with one dumbbell — e.g. Squat to Press, Man Maker. Log one weight (whatever the limiting movement allows) and one rep count (how many rounds through the full sequence). The <b>Combo</b> group in the exercise picker has 30+ built in.</div>
