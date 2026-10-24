@@ -13,9 +13,14 @@
        Fonts stylesheet + files, our own inline/eval'd React code, YouTube video embeds and thumbnails,
        and the Anthropic API endpoint are allowed. 'unsafe-eval' is needed for @babel/standalone's JSX
        transpile; 'unsafe-inline' is needed for the inline <script type="text/babel"> and inline styles. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://img.youtube.com https://i.ytimg.com; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://api.anthropic.com; manifest-src 'self';"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://img.youtube.com https://i.ytimg.com; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://api.anthropic.com; manifest-src 'self'; worker-src 'self';"/>
   <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-size='15' font-weight='900' text-anchor='middle' fill='%23c6ff5a'%3E90%3C/text%3E%3C/svg%3E"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#0a0a0a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="90Strong"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap"/>
@@ -2349,6 +2354,65 @@ class ErrorBoundary extends React.Component{
   }
 }
 
+// Install prompt — rendered in the HELP tab. Shows a one-tap "Install" button on Chrome / Android
+// when the browser has staged a BeforeInstallPromptEvent, and otherwise shows per-browser steps.
+function InstallPrompt(){
+  const [installable,setInstallable]=useState(()=>!!window.__ninetyStrongInstallPrompt);
+  const [installed,setInstalled]=useState(()=>{
+    try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch(e){return false;}
+  });
+  const [busy,setBusy]=useState(false);
+  const [outcome,setOutcome]=useState(null);
+  useEffect(()=>{
+    const onReady=()=>setInstallable(true);
+    const onInstalled=()=>{setInstalled(true);setInstallable(false);};
+    window.addEventListener("ninetystrong:installable",onReady);
+    window.addEventListener("ninetystrong:installed",onInstalled);
+    return()=>{
+      window.removeEventListener("ninetystrong:installable",onReady);
+      window.removeEventListener("ninetystrong:installed",onInstalled);
+    };
+  },[]);
+  const prompt=async()=>{
+    const evt=window.__ninetyStrongInstallPrompt;
+    if(!evt)return;
+    setBusy(true);
+    try{
+      await evt.prompt();
+      const choice=await evt.userChoice;
+      setOutcome(choice&&choice.outcome==="accepted"?"accepted":"dismissed");
+      if(choice&&choice.outcome==="accepted")window.__ninetyStrongInstallPrompt=null;
+    }catch(e){setOutcome("error");}
+    setBusy(false);
+  };
+  if(installed){
+    return(
+      <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}>
+        ✓ Installed — you're running the home-screen app. Works offline, no browser tabs.
+      </div>
+    );
+  }
+  if(installable){
+    return(
+      <div style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"12px",marginBottom:12}}>
+        <div className="help-p" style={{marginBottom:10}}>Tap below to add 90Strong to your home screen. It runs full-screen, keeps your workouts offline, and launches instantly — like a real app.</div>
+        <button className="btn btn-accent" style={{width:"100%",padding:14,minHeight:44,fontSize:14,letterSpacing:2}} disabled={busy} onClick={prompt}>
+          {busy?"…":"+ INSTALL 90STRONG"}
+        </button>
+        {outcome==="dismissed"&&<div className="help-p" style={{marginTop:8,color:"var(--muted)",fontStyle:"italic"}}>You can tap INSTALL again anytime.</div>}
+      </div>
+    );
+  }
+  // Fallback: either the browser already handled it, or doesn't support beforeinstallprompt.
+  return(
+    <div className="help-p" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:6,padding:"10px 12px"}}>
+      <div style={{marginBottom:6}}><b>Chrome (Android):</b> tap the ⋮ menu → <b>Install app</b> or <b>Add to Home screen</b>.</div>
+      <div style={{marginBottom:6}}><b>Safari (iOS):</b> tap the share button → <b>Add to Home Screen</b>.</div>
+      <div><b>Chrome (desktop):</b> look for the install icon in the address bar, or ⋮ → <b>Install 90Strong</b>.</div>
+    </div>
+  );
+}
+
 function GymTracker(){
   // Pending hash key: if a #key= URL is loaded, we stage it here instead of auto-saving,
   // so the user explicitly confirms before overwriting a stored key (a mitigation against
@@ -3639,6 +3703,9 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="section-label">Modes</div>
             <div className="help-p">The <b>LVL</b> button in the top header switches between three modes: <b>LVL1</b> (standard AI-driven workouts), <b>LVL2</b> (high-intensity AI-driven workouts), and <b>LVL3</b> (circuit workouts built from your video library, no AI). The nav updates to show what's relevant to the current mode.</div>
 
+            <div className="section-label">Install to Your Home Screen</div>
+            <InstallPrompt/>
+
             <div className="section-label">★ Set Up Your Profile First</div>
             <div className="help-p" style={{background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,padding:"10px 12px"}}>Tap the <b>👤</b> icon in the header to tell the AI about <b>you</b>: gym type, priority muscle group, dominant side, dumbbell max, bodyweight, session time budget, progression preferences, and freeform notes. All fields are optional, defaults are neutral — but the AI's plans get much better once you fill this in. <b>Do this before generating your first AI workout.</b></div>
 
@@ -3833,6 +3900,31 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
 const root=ReactDOM.createRoot(document.getElementById("root"));
 root.render(<ErrorBoundary><GymTracker/></ErrorBoundary>);
+</script>
+<script>
+  // Service worker registration — enables offline use and the Chrome / Android install prompt.
+  // Scoped to /iron-log/ to match the GitHub Pages path. Failure is non-fatal: the app runs
+  // identically without it, we just lose offline and installability.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => { /* ignore */ });
+    });
+  }
+
+  // Capture the install prompt so we can show it where users will see it (the HELP tab).
+  // The browser only fires beforeinstallprompt once per visit; we stash the event on window
+  // so a tap in the HELP tab (or an opportunistic nudge from the app) can call prompt() later.
+  window.__ninetyStrongInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    window.__ninetyStrongInstallPrompt = e;
+    // Notify the React tree if it's listening.
+    window.dispatchEvent(new CustomEvent("ninetystrong:installable"));
+  });
+  window.addEventListener("appinstalled", () => {
+    window.__ninetyStrongInstallPrompt = null;
+    window.dispatchEvent(new CustomEvent("ninetystrong:installed"));
+  });
 </script>
 </body>
 </html>
