@@ -1,53 +1,66 @@
-# 90Strong (iron-log) audit: commit a411361
+# 90Strong (iron-log) audit: commit d015a4d
 
-Updated Oct 24, 2026. Commit a411361 ("Clean up 11 Low items") was pushed at 5:29 AM PT on Oct 24, 2026, and tested around 6:10 AM PT. This combines three sources:
+Updated Oct 24, 2026. Commit d015a4d ("Clean up the Oct 24 a411361 audit: Medium regression + 8 Lows") was pushed at 10:30 AM PT on Oct 24, 2026, and tested around 12:55 PM PT. This audit also covers the two earlier commits that never got their own audit: 62e9f28 (installable app / PWA) and bf145f1 (privacy policy page and tip jar). It combines three sources:
 
-- A desktop pass on Oct 24, with site data cleared, no AI, save pop-ups clicked by hand and 0 console errors (Workouttester1).
+- A desktop pass on Oct 24, with site data cleared and no AI (Workouttester1).
 - A phone pass on Oct 24 at 390px wide with no AI (Workouttester2).
 - A code review by Exercise app, which found the live site matches the repo. The tests pass 44 of 44.
 
-**Verdict: shippable.** There's one Medium layout regression on phone. Everything else still open is Low or polish.
+New goal: release on Google Play and the Apple App Store with banner ads. See **Store readiness** below.
+
+**Verdict: the app works well online, but it is NOT store-ready.** There's one High (offline cold start) and two Mediums, plus a list of store must-fixes.
 
 ## Open issues, in priority order
 
 | # | Issue | Severity | Suggested fix |
 |---|---|---|---|
-| 1 | On Treadmill and Bike rows at 390px, both ✓ and ✕ now drop to a second line under the inputs. This is a regression: before, only ✕ wrapped. This commit put both buttons in one group that can't split (lines 1383–1397). It's fine on desktop, even at 500% zoom. | Medium | Stop the row from wrapping and let the inputs shrink |
-| 2 | Saving a one-side L/R set brings up a blocking pop-up: "Dropping 1 single-side set…", even though the set is kept. Cancel stops the whole save. | Low (should-fix) | Reword it, and make it a note that doesn't block the save |
-| 3 | "+ Add an exercise to this plan" is 37px tall (line 3284), and START SESSION TIMER is 39px | Low (should-fix) | Make taps 44px tall |
-| 4 | Remove still wraps under SWAP on AI cards at 390px. The line 1712 change doesn't fix it at that width. | Low | Keep it on one line |
-| 5 | ABOUT still describes Planet Fitness gear for every gym type (line 3628) | Low | Show it only for Planet Fitness |
-| 6 | The code still has three 8px labels. The phone saw nothing 11px or smaller on the screens it checked. | Low | Raise them to 12px |
-| 7 | At 256px the nav tabs shrink to 37px, and every tab except LOG is cut off with "…". The ⚙ now stays on screen. | Low | Use shorter labels or icons at narrow widths |
-| 8 | **New:** A copied row with both fields cleared is dropped with no message | Low | Warn, or say it was dropped |
-| 9 | **New:** LAST leaves out "lb" (30×8), while History shows "30lb × 8" | Low | Use the same format in both |
-| 10 | API key stored in plain text. Not a concern until accounts or payments are added. | Backlog | Move the key out of plain storage when accounts arrive |
+| 1 | Offline cold start is broken. `sw.js` lines 53–57 save any page fetched online over `./index.html`, so after opening Privacy, an offline reload shows the Privacy Policy at the app's URL (desktop, reproduced twice). With a clean cache the page is blank (phone). The cache holds only the app's own 8 files, not React, ReactDOM or Babel (unpkg) or Google Fonts. | High | Cache index.html only for the app request with an ok response; cache or bundle the CDN scripts and fonts |
+| 2 | The exercise ✕ (Remove) is now a bare ✕ with no confirm or undo. It looks identical to a set's ✕ (same red, 44x44) and sits about 88px above it. One tap deleted Dumbbell Bench Press and its 2 confirmed sets from the draft. | Medium | Add a confirm or undo, or use a different icon |
+| 3 | The cardio row squeezes below 390px instead of wrapping. At 320px the boxes are 25px wide (12.5 shows "2.5", placeholders read "lv" and "ca"); at 280px they're 12px wide and unusable. | Medium | Let the row wrap, or set a minimum input width |
+| 4 | The AI badge and HELP still say "tap SWAP" and ▲▼, but the button is now ⇄ | Low | Update the wording |
+| 5 | The Privacy Policy link is about a 131x15px tap | Low | Make it 44px tall |
+| 6 | Offline wording conflicts: the install panel says "Works offline", HELP says a cold reload needs internet | Low | Make them agree (after fixing #1) |
+| 7 | The save pop-up still says "Dropping N exercises with no data…", and Cancel aborts the whole save | Low | Reword it, and let the save go ahead |
+| 8 | Narrow tabs: on desktop the tabs truncate ("HIST…") at 256px (500% zoom) and in 393px emulation. On the phone, the nav fits at 256px but at 280px drops to 10px text with HISTORY cut off. | Low | Use shorter labels or icons at narrow widths |
+| 9 | Profiles saved before gym type existed now default to Commercial instead of Planet Fitness | Low | Migrate old profiles to the previous default |
+| 10 | Install steps are in ABOUT, not HELP | Low | Move or link them from HELP |
+| 11 | The iOS home-screen meta tags appear twice in the page header | Low | Remove the duplicates |
 
-## Intentional
+## Store readiness (must-fix before submitting with ads)
 
-- Muscle tags and the MUSCLES count leave cardio out on purpose.
+- **Privacy text:** privacy.html, ABOUT and HELP say no ads, no analytics and no tracking. They need to cover AdMob and say that profile data (bodyweight, gym) goes to Anthropic. The policy also mentions sharing the key in backups, an option that doesn't exist.
+- **Security policy:** the page's CSP blocks ad scripts.
+- **Safe areas:** there are no safe-area insets for the notch or home bar.
+- **Banner placement:** a bottom 320x50 banner fits with SAVE about 60px clear if the page gets bottom padding and pop-ups sit above the banner. Nothing is fixed to the bottom today. A top banner is a worse fit.
+- **Store paperwork:** Google Play Data Safety and "contains ads", Apple privacy labels, the ATT prompt, EU consent, and an age rating of 13+ or 18+.
+- **Tip jar:** it shows "coming soon". It must be hidden in store builds or use in-app purchase (Apple 3.1.1, Play billing).
+- **Google Play:** needs a verification file at the domain root, so a custom domain.
+- **iOS:** needs a native Capacitor build (Apple 4.2 rejects plain web wrappers).
+- **AI consent:** a consent screen before any data goes to Anthropic (Apple 5.1.2(i)).
+- **Build:** bundle React and pre-build the code instead of compiling with Babel in the browser.
+- **External links:** decide whether the YouTube, Anthropic and GitHub links open in the app or in the browser.
+- **API key:** it's stored in plain text.
 
 ## Fixed in this build
 
-- A half-filled L/R set shows the inline hint, and saving now warns too.
-- Cardio under a minute reads "45s".
-- The hint now says "below AI target".
-- Cardio rows no longer save empty weight and reps fields.
-- Elevate Core and PF360 text is gone from HELP for gym types other than Planet Fitness.
-- SCAN MACHINE, the pickers, the YouTube box and ADD are 44px or taller.
-- Remove is 44px tall.
+- Treadmill and Bike ✓ and ✕ stay on one line at 390px.
+- A one-side L/R set saves, with an info banner afterward.
+- "+ Add an exercise" and START SESSION TIMER are 44px.
+- The AI card buttons fit on one 44px row.
+- LAST shows "lb" and matches History.
+- A copied row with both fields cleared gets an alert.
+- ABOUT shows the Planet Fitness gear text only on Planet Fitness.
+- No tap target under 44px and no text under 12px at 390px, except the Privacy link.
+- PWA: installs as 90Strong in a standalone window; the manifest and icons are OK.
 
 ## Earlier fixes still passing
 
 - Push-Ups with only reps entered saves as "BW × 15".
-- Mountain Climbers reads back as 3min.
-- The copied-row prompt works with OK and Cancel clicked by hand: OK saves the copies and Cancel drops them.
+- Mountain Climbers reads back as 3min and 45s.
 - The partial-set warning works.
-- On Planet Fitness, Chest defaults to Smith Machine Bench Press and barbell lifts are hidden.
 - A bodyweight of 182.5 shows as "182.5 BW".
-- Treadmill level reads lv3.5 in both LAST and History.
-- Ski Erg is in the cardio list.
+- On Planet Fitness, Chest defaults to Smith Machine Bench Press.
 
 ## Notes
 
-- Not covered: real AI plans, SCAN MACHINE, backup import, and real iOS Safari.
+- Not covered: real AI plans, SCAN MACHINE, backup import, a real iPhone or installed iOS app, a real ad SDK, and OK/Cancel on the copied-set prompt.
