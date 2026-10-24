@@ -11,12 +11,13 @@
 //
 // Bump CACHE_VERSION on every deploy so stale app shells get purged.
 
-const CACHE_VERSION = "v1-2026-10-24";
+const CACHE_VERSION = "v2-2026-10-24";
 const CACHE_NAME = `90strong-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./privacy.html",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",

@@ -3791,6 +3791,22 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>Can I use this offline?</b> Partly. While the browser tab stays open, LOG and HISTORY continue to work with no network. A cold reload needs internet (the app isn't cached offline). AI generation always needs internet.</div>
             <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
 
+            <div className="section-label" style={{marginTop:24}}>Support · Privacy</div>
+            <div className="help-p">90Strong is free, has no ads, and keeps your data on your device. If it helps you train, you can toss a tip into the jar.</div>
+            {/* NOTE: swap YOUR_USERNAME below for your actual Buy Me a Coffee or Ko-fi handle before shipping to users.
+                If you prefer Ko-fi: href="https://ko-fi.com/YOUR_USERNAME". If you prefer PayPal: adjust accordingly.
+                Setting href="" (empty) hides the button automatically. */}
+            {(() => {
+              const supportUrl = "https://buymeacoffee.com/YOUR_USERNAME"; // ← change this
+              if(!supportUrl||supportUrl.includes("YOUR_USERNAME"))return(
+                <div className="help-p" style={{fontStyle:"italic",color:"var(--muted)"}}>Tip jar coming soon.</div>
+              );
+              return(
+                <a href={supportUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",padding:"12px 20px",background:"var(--accent)",color:"#0a0a0a",borderRadius:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,fontWeight:700,textDecoration:"none",minHeight:44,boxSizing:"border-box"}}>☕ BUY ME A COFFEE</a>
+              );
+            })()}
+            <div className="help-p" style={{marginTop:16}}><a href="privacy.html" style={{color:"var(--accent)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:1,textDecoration:"underline"}}>→ Privacy Policy</a></div>
+
             <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
           </div>
         )}

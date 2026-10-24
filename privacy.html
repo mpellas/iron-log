@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Privacy Policy — 90Strong</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"/>
+  <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-size='15' font-weight='900' text-anchor='middle' fill='%23c6ff5a'%3E90%3C/text%3E%3C/svg%3E"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@300;400;600&display=swap"/>
+  <style>
+    :root{--bg:#0a0a0a;--surface:#131313;--border:#2a2a2a;--accent:#c8f135;--text:#f0f0f0;--muted:#888;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;line-height:1.6;padding:24px 20px 60px;}
+    .wrap{max-width:720px;margin:0 auto;}
+    h1{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;}
+    .sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:28px;}
+    h2{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--accent);margin:28px 0 10px;}
+    p{margin-bottom:12px;font-size:15px;}
+    ul{margin:4px 0 16px 24px;}
+    li{margin-bottom:6px;font-size:15px;}
+    code{background:var(--surface);padding:1px 6px;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--accent);}
+    a{color:var(--accent);}
+    .back{display:inline-block;margin-top:32px;padding:12px 16px;border:1px solid var(--border);border-radius:5px;color:var(--text);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;min-height:44px;}
+    .back:hover{border-color:var(--accent);color:var(--accent);}
+    .updated{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy Policy</h1>
+  <div class="sub">90Strong · Workout Tracker</div>
+
+  <p>90Strong is a personal workout tracker. It runs entirely in your browser. There is no account, no cloud, and no analytics tracking you across the web. This policy describes exactly what the app does with information, so you can decide if you're comfortable using it.</p>
+
+  <h2>What stays on your device</h2>
+  <p>Everything you log — exercises, sets, weights, reps, notes, YouTube video entries, and your profile fields (gym type, dumbbell max, bodyweight, etc.) — is stored only in your browser's local storage, on the device you logged it from. We do not have a copy. If you clear your browser's site data, uninstall the home-screen app, or switch devices without exporting a backup, that data is lost.</p>
+
+  <h2>What leaves your device</h2>
+  <p>90Strong sends information outside your device only in these cases, each triggered by your own action:</p>
+  <ul>
+    <li><strong>AI plan generation.</strong> When you tap AI REC and your API key is set, the app sends your recent workout summary and the exercise library to <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic's API</a> so Claude can draft the plan. Your API key is included in that request. Anthropic's privacy terms apply to that traffic.</li>
+    <li><strong>Machine photo scan.</strong> If you use the camera scan feature, the photo is sent in the same request to Anthropic for identification, then discarded. The photo is not stored anywhere beyond that single request.</li>
+    <li><strong>YouTube playback.</strong> Any YouTube video you link or play is loaded directly from YouTube's embed service. YouTube's privacy terms apply to that playback. The app does not route the request through its own servers.</li>
+    <li><strong>Static assets.</strong> The page itself, its fonts, and the React / Babel libraries load from GitHub Pages, Google Fonts, and unpkg.com. Those services may log your IP address as part of standard web serving.</li>
+  </ul>
+
+  <h2>Your API key</h2>
+  <p>Your Anthropic API key is stored in plain text in your browser's local storage. It is used only in direct requests from your browser to Anthropic. It is not sent to any other server, not displayed anywhere in the UI after you save it, and not included in the backup export unless you choose to include it when sharing. You can clear it any time via the <code>⚙</code> icon.</p>
+
+  <h2>Cookies and tracking</h2>
+  <p>90Strong sets no cookies, uses no analytics (Google, Mixpanel, Posthog, etc.), and does not fingerprint your browser. There is no advertising. The only persistent storage the app uses is your browser's local storage for your workout data and settings.</p>
+
+  <h2>Backups and sharing</h2>
+  <p>The <code>💾</code> button exports your full workout history and settings as a JSON file to your device. You choose where that file goes. The app does not upload backups anywhere.</p>
+
+  <h2>Minors</h2>
+  <p>90Strong is not directed at children under 13 and does not knowingly collect any information from them.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the updated date at the bottom will change too. The source history of this page is public at <a href="https://github.com/mpellas/iron-log" target="_blank" rel="noopener">github.com/mpellas/iron-log</a>.</p>
+
+  <h2>Contact</h2>
+  <p>Open an issue at <a href="https://github.com/mpellas/iron-log/issues" target="_blank" rel="noopener">github.com/mpellas/iron-log/issues</a>.</p>
+
+  <a href="./" class="back">← Back to the app</a>
+
+  <div class="updated">Last updated: October 24, 2026</div>
+</div>
+</body>
+</html>
