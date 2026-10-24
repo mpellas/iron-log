@@ -143,6 +143,45 @@ t("Mountain Climbers IS in CARDIO_EXERCISES", ctx.CARDIO_EXERCISES.has("Mountain
 // Guard: Chest list leads with Barbell for commercial users
 t("Chest list leads with Barbell Bench Press", EXERCISE_LIBRARY.Chest[0] === "Barbell Bench Press");
 
+// Guard: cardio sub-minute formatter (Oct 24 audit #3) — "0.75 min" → "45s" on readback
+const formatCardioDur = d => {
+  const n = Number(d);
+  return n > 0 && n < 1 ? `${Math.round(n * 60)}s` : `${d}min`;
+};
+t("cardio format: 0.75 → '45s'", formatCardioDur("0.75") === "45s");
+t("cardio format: 0.5 → '30s'", formatCardioDur("0.5") === "30s");
+t("cardio format: 1 → '1min'", formatCardioDur("1") === "1min");
+t("cardio format: 3 → '3min'", formatCardioDur("3") === "3min");
+t("cardio format: 15 → '15min'", formatCardioDur("15") === "15min");
+
+// Guard: stripEmptyKeys removes empty-string fields but keeps id and _pending
+const stripEmptyKeys = s => {
+  const out = { ...s };
+  Object.keys(out).forEach(k => {
+    if (k === "id" || k === "_pending") return;
+    if (out[k] === "" || out[k] === null || out[k] === undefined) delete out[k];
+  });
+  return out;
+};
+t("stripEmptyKeys: cardio with empty weight/reps → cleaned", (() => {
+  const r = stripEmptyKeys({ id: "a", duration: "5", weight: "", reps: "", calories: "100" });
+  return r.weight === undefined && r.reps === undefined && r.duration === "5" && r.calories === "100";
+})());
+t("stripEmptyKeys: preserves id", stripEmptyKeys({ id: "x", weight: "" }).id === "x");
+
+// Guard: single-side L/R detection for save warning (Oct 24 audit #1)
+const singleSideCheck = s => {
+  const nz = v => v !== undefined && v !== null && v !== "" && Number(v) !== 0;
+  const Lcomplete = nz(s.weightL) && nz(s.repsL);
+  const Rcomplete = nz(s.weightR) && nz(s.repsR);
+  if (Lcomplete && !Rcomplete) return "R empty";
+  if (Rcomplete && !Lcomplete) return "L empty";
+  return null;
+};
+t("single-side: L-only typed → 'R empty'", singleSideCheck({ weightL: "50", repsL: "8", weightR: "", repsR: "" }) === "R empty");
+t("single-side: R-only typed → 'L empty'", singleSideCheck({ weightL: "", repsL: "", weightR: "40", repsR: "10" }) === "L empty");
+t("single-side: both filled → null", singleSideCheck({ weightL: "50", repsL: "8", weightR: "50", repsR: "8" }) === null);
+
 console.log("---");
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

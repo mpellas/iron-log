@@ -994,7 +994,7 @@ const css=`
   .date-badge{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px;}
   .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 6px;margin-left:0;line-height:1;min-width:44px;min-height:44px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
-  .nav-btn{flex:1;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;}
+  .nav-btn{flex:1;min-width:0;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
   .content{padding:20px;}
@@ -1004,7 +1004,7 @@ const css=`
   .help-p code{background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent2);font-size:11px;}
   .help-tab .section-label + .help-p{margin-top:-2px;}
   .help-tab .section-label:not(:first-of-type){margin-top:22px;}
-  .input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;border-radius:6px;outline:none;transition:border-color 0.15s;}
+  .input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:12px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;border-radius:6px;outline:none;transition:border-color 0.15s;min-height:44px;}
   .input:focus{border-color:var(--accent);}
   select.input{cursor:pointer;}
   .row{display:flex;gap:8px;}
@@ -1019,7 +1019,7 @@ const css=`
   .btn-check{background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:10px 10px;font-size:16px;font-weight:700;min-height:44px;min-width:44px;cursor:pointer;line-height:1;transition:all 0.12s;flex-shrink:0;}
   .btn-check:hover{background:rgba(200,241,53,0.12);}
   .btn-check:active{background:var(--accent);color:#0a0a0a;}
-  .scan-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:var(--surface);border:1px dashed var(--accent);border-radius:6px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;}
+  .scan-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:var(--surface);border:1px dashed var(--accent);border-radius:6px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;min-height:44px;}
   .scan-btn:hover{background:rgba(200,241,53,0.06);}
   .scan-result{background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;}
   .scan-result-icon{font-size:20px;flex-shrink:0;margin-top:2px;}
@@ -1277,13 +1277,13 @@ function ProfileModal({profile,onSave,onClose,onReset}){
 
         <div className="profile-field">
           <label className="profile-label">Additional notes for the AI (optional)</label>
-          <textarea className="profile-input" rows={2} placeholder="e.g. 'nagging left shoulder — avoid overhead pressing'" value={p.notes} onChange={e=>upd("notes",e.target.value)} style={{resize:"vertical",minHeight:50,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}/>
+          <textarea className="profile-input" rows={2} placeholder="e.g. 'nagging left shoulder — avoid overhead pressing'" value={p.notes} onChange={e=>upd("notes",e.target.value)} style={{resize:"vertical",minHeight:50,fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}/>
         </div>
 
         <button className="btn btn-accent" style={{width:"100%",padding:14,marginTop:4}} onClick={()=>onSave(p)}>SAVE PROFILE</button>
         <div style={{display:"flex",gap:8,marginTop:8}}>
-          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
-          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Reset all profile fields to defaults?"))onReset();}}>RESET</button>
+          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
+          <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Reset all profile fields to defaults?"))onReset();}}>RESET</button>
         </div>
         <div className="key-note" style={{marginTop:14}}>STORED LOCALLY · USED ONLY IN AI PROMPTS · NEVER SENT ELSEWHERE</div>
       </div>
@@ -1310,12 +1310,12 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
         <input className="key-input" type="password" autoComplete="off" placeholder="sk-ant-..." value={val} onChange={e=>setVal(e.target.value)}/>
         <button className="btn btn-accent" style={{width:"100%",padding:14,opacity:val.trim()?1:0.5,cursor:val.trim()?"pointer":"default"}} disabled={!val.trim()} onClick={()=>val.trim()&&onSave(val.trim())}>{hasKey?"REPLACE KEY":"SAVE & START"}</button>
         {!hasKey&&onSkip&&(
-          <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onSkip}>SKIP — USE WITHOUT AI</button>
+          <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={onSkip}>SKIP — USE WITHOUT AI</button>
         )}
         {hasKey&&(
           <div style={{display:"flex",gap:8,marginTop:8}}>
-            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
-            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--danger)",borderRadius:6,color:"var(--danger)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Remove the API key? AI features won't work until you add a new one."))onRemove();}}>REMOVE KEY</button>
+            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={onClose}>CANCEL</button>
+            <button style={{flex:1,padding:12,background:"none",border:"1px solid var(--danger)",borderRadius:6,color:"var(--danger)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={()=>{if(window.confirm("Remove the API key? AI features won't work until you add a new one."))onRemove();}}>REMOVE KEY</button>
           </div>
         )}
         <div className="key-note">STORED LOCALLY · NEVER DISPLAYED · NEVER SENT ANYWHERE EXCEPT ANTHROPIC</div>
@@ -1370,17 +1370,24 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
     </div>
   );
   if(isCardio)return(
-    <div className="set-row" style={{flexWrap:"wrap",gap:4}}>
-      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:52,maxWidth:70,flex:"0 1 56px",padding:"10px 4px"}}/>
-      <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>MIN</span>
-      {!noResistance&&<>
-        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:48,maxWidth:60,flex:"0 1 52px",padding:"10px 4px"}}/>
-        <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>LVL</span>
-      </>}
-      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:52,maxWidth:70,flex:"0 1 56px",padding:"10px 4px"}}/>
-      <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:28}}>CAL</span>
-      {checkBtn}
-      <button className="btn btn-danger" onClick={onRemove}>✕</button>
+    // Two-row layout on narrow phones: inputs + their labels on the first row, buttons flex-wrap
+    // to the next if there's no space. This keeps the three numeric inputs lined up and prevents
+    // the ✓/✕ from stealing from input width.
+    <div className="set-row" style={{flexWrap:"wrap",gap:4,alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center",gap:4,flex:"1 1 auto",minWidth:0,flexWrap:"wrap"}}>
+        <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:48,maxWidth:64,flex:"0 1 52px",padding:"10px 4px"}}/>
+        <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22}}>MIN</span>
+        {!noResistance&&<>
+          <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:44,maxWidth:54,flex:"0 1 46px",padding:"10px 4px"}}/>
+          <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22}}>LVL</span>
+        </>}
+        <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:48,maxWidth:64,flex:"0 1 52px",padding:"10px 4px"}}/>
+        <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22}}>CAL</span>
+      </div>
+      <div style={{display:"flex",gap:4,flexShrink:0}}>
+        {checkBtn}
+        <button className="btn btn-danger" onClick={onRemove}>✕</button>
+      </div>
     </div>
   );
   if(isUnilateral){
@@ -1410,7 +1417,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {effFloor}lb</span>}
+      {(belowL||belowR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below {!isNaN(aiW)&&aiW<floor?"AI target":"last"}: {effFloor}lb</span>}
       {(halfL||halfR)&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>⚠ {halfL?"right":"left"} side empty — will save single-side</span>}
     </div>
     );
@@ -1461,7 +1468,7 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
         {checkBtn}
         <button className="btn btn-danger" onClick={onRemove}>✕</button>
       </div>
-      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below last: {effFloor}lb</span>}
+      {belowLast&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,paddingLeft:2}}>↓ below {!isNaN(aiW)&&aiW<floor?"AI target":"last"}: {effFloor}lb</span>}
     </div>
   );
 }
@@ -1491,7 +1498,7 @@ function RestTimer({seconds,activeRest}){
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:activeRest?"rgba(255,140,0,0.12)":"var(--surface2)",border:activeRest?"1px solid rgba(255,140,0,0.5)":"1px solid var(--border)",borderRadius:6,marginBottom:10,marginTop:2}}>
       <div style={{flex:1}}>
         <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:activeRest?"#ff8c00":"var(--muted)",letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
-        {activeRest&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",letterSpacing:1,marginTop:2}}>⏱ {seconds}s — then next superset</div>}
+        {activeRest&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1,marginTop:2}}>⏱ {seconds}s — then next superset</div>}
       </div>
       {timeLeft===null&&<button className="btn btn-ghost" style={{padding:"10px 14px",fontSize:12,minHeight:44}} onClick={start}>{activeRest?"GO":"START REST"}</button>}
       {timeLeft!==null&&timeLeft>0&&<span style={{fontFamily:"Bebas Neue",fontSize:22,color:activeRest?"#ff8c00":"var(--accent)",letterSpacing:2}}>{mins}:{secs}</span>}
@@ -1689,10 +1696,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           <div className="exercise-name">{exercise.name}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <div className="exercise-meta">{exercise.muscle}{isCardio?(CARDIO_EXERCISES.has(exercise.name)?" · duration + calories":" · duration + level + calories"):""}</div>
-            {isBodyweight&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent)",borderRadius:3,padding:"2px 6px"}}>BODYWEIGHT</span>}
-            {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"2px 6px"}}>L+R</span>}
-            {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#fff",background:"#555",borderRadius:3,padding:"2px 6px"}}>NOT AT MY GYM</span>}
-            {flagged&&<span style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:1.5,color:"#fff",background:"#cc4400",borderRadius:3,padding:"2px 6px"}}>NEEDS WORK</span>}
+            {isBodyweight&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent)",borderRadius:3,padding:"2px 6px"}}>BODYWEIGHT</span>}
+            {isUnilateral&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1.5,color:"#0a0a0a",background:"var(--accent2)",borderRadius:3,padding:"2px 6px"}}>L+R</span>}
+            {unavailable&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1.5,color:"#fff",background:"#555",borderRadius:3,padding:"2px 6px"}}>NOT AT MY GYM</span>}
+            {flagged&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1.5,color:"#fff",background:"#cc4400",borderRadius:3,padding:"2px 6px"}}>NEEDS WORK</span>}
             {exerciseTiming&&exerciseTiming.start&&<span className="exercise-time-badge">⏱ {formatDuration(Math.max(0,Math.round(((exerciseTiming.end||Date.now())-exerciseTiming.start)/1000)))}</span>}
           </div>
         </div>
@@ -1702,7 +1709,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚫</button>
           <button onClick={handleFlag} title={flagged?"Remove difficulty flag":"Flag as needs work"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:flagged?1:0.3,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚩</button>
           {allowSwap&&<button className="btn-swap" onClick={()=>setSwapOpen(o=>!o)}>{swapOpen?"CANCEL":"⇄ SWAP"}</button>}
-          <button className="btn btn-danger" onClick={onRemove}>Remove</button>
+          <button className="btn btn-danger" onClick={onRemove} style={{whiteSpace:"nowrap",flexShrink:0}}>Remove</button>
         </div>
       </div>
       {swapOpen&&(
@@ -1726,11 +1733,11 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
             <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
               AI TARGET: {exercise.aiWeight}lb × {exercise.aiReps} reps · <span style={{color:"var(--muted)",letterSpacing:0.5}}>tap ✓ on a blank set to fill</span>
             </div>
-            {isDeload&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"#e8a13a",letterSpacing:0.5,marginTop:2,lineHeight:1.3}}>↓ DELOAD — down from last peak {peak}lb to rebuild. This is intentional.</div>}
+            {isDeload&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#e8a13a",letterSpacing:0.5,marginTop:2,lineHeight:1.3}}>↓ DELOAD — down from last peak {peak}lb to rebuild. This is intentional.</div>}
           </div>
         );
       })()}
-      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}if(last.type==="cardio"){const parts=last.sets.map(s=>{const segs=[];if(s.dur)segs.push(`${s.dur}min`);if(s.lvl)segs.push(`lv${s.lvl}`);if(s.cal)segs.push(`${s.cal}cal`);return segs.join(" · ")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
+      {(()=>{const last=getLastLoggedDetail(exercise.name,history);const st={fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--text)",letterSpacing:0.5,marginBottom:4,lineHeight:1.5,opacity:0.85};if(!last)return(<div style={{...st,color:"var(--muted)",opacity:1,fontStyle:"italic"}}>— new exercise, no prior log</div>);if(last.type==="bw"){const parts=last.sets.map(s=>s.reps).join("  ·  ");return(<div style={st}>LAST: {parts} reps</div>);}if(last.type==="rung"){const parts=last.sets.map(s=>`R${s.rung}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="leveltimed"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="levelreps"){const parts=last.sets.map(s=>`Lv${s.lv}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="timed"){const parts=last.sets.map(s=>`${s.dur}s`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="uni"){const parts=last.sets.map(s=>{const hasL=s.L!==undefined&&s.L!==""&&s.L!==null;const hasR=s.R!==undefined&&s.R!==""&&s.R!==null;const segs=[];if(hasL)segs.push(`L${s.L}×${s.rL}`);if(hasR)segs.push(`R${s.R}×${s.rR}`);return segs.join("/")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}if(last.type==="assist"){const parts=last.sets.map(s=>`${s.assist}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST ASSIST: {parts}</div>);}if(last.type==="cardio"){const parts=last.sets.map(s=>{const segs=[];if(s.dur){const d=Number(s.dur);segs.push(d>0&&d<1?`${Math.round(d*60)}s`:`${s.dur}min`);}if(s.lvl)segs.push(`lv${s.lvl}`);if(s.cal)segs.push(`${s.cal}cal`);return segs.join(" · ")||"—";}).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);}const parts=last.sets.map(s=>`${s.weight}×${s.reps}`).join("  ·  ");return(<div style={st}>LAST: {parts}</div>);})()}
       {isTimed&&exercise.aiReps&&(
         <div style={{marginTop:6,marginBottom:2}}>
           <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",letterSpacing:1,lineHeight:1.3}}>
@@ -1772,10 +1779,10 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
       </div>
       <button className="btn-add-set" onClick={addSet}>{isCardio?"+ ADD INTERVAL":"+ ADD SET"}</button>
       <div style={{marginTop:10}}>
-        <input style={{width:"100%",background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",padding:"6px 10px",fontFamily:"IBM Plex Mono",fontSize:10,borderRadius:4,outline:"none"}}
+        <input style={{width:"100%",background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",padding:"12px 10px",fontFamily:"IBM Plex Mono",fontSize:12,borderRadius:4,outline:"none",minHeight:44}}
           placeholder="📺 Paste YouTube link for reference..."
           value={ytUrl} onChange={e=>{const u=e.target.value;onChange({...exercise,youtubeUrl:u});saveYoutubeUrl(exercise.name,u);}}/>
-        {isValidYt&&<a href={ytUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:4,fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent)",letterSpacing:1,textDecoration:"none"}}>▶ OPEN VIDEO</a>}
+        {isValidYt&&<a href={ytUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:4,fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",letterSpacing:1,textDecoration:"none"}}>▶ OPEN VIDEO</a>}
       </div>
     </div>
   );
@@ -1784,8 +1791,9 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
 function HistoryItem({entry,onDelete}){
   const [open,setOpen]=useState(false);
   const [confirming,setConfirming]=useState(false);
-  // Exclude Cardio from the muscle tags so the chip count matches the stats box ("2 MUSCLES"),
-  // which already excludes Cardio and Finisher. Cardio still shows via the exercise's own entry below.
+  // Exclude Cardio and Finisher from the muscle tags so the chip count matches the stats box
+  // ("2 MUSCLES"), which also excludes them. Decision: cardio is NOT counted as a muscle group
+  // anywhere in the app — a conscious call per the Oct 24 audit's #6 "confirm intent" item.
   const muscles=[...new Set(entry.exercises.map(e=>e.muscle).filter(m=>m&&m!=="Cardio"&&m!=="Finisher"))];
   return(
     <div className="history-entry">
@@ -1801,11 +1809,11 @@ function HistoryItem({entry,onDelete}){
         <div style={{display:"flex",alignItems:"center",gap:8}} onClick={e=>e.stopPropagation()}>
           {confirming
             ?<>
-              <span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1}}>DELETE?</span>
-              <button className="btn btn-ghost" style={{padding:"4px 10px",fontSize:10,color:"#ff4444"}} onClick={()=>onDelete(entry.id)}>YES</button>
-              <button className="btn btn-ghost" style={{padding:"4px 10px",fontSize:10}} onClick={()=>setConfirming(false)}>NO</button>
+              <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1}}>DELETE?</span>
+              <button className="btn btn-ghost" style={{padding:"4px 10px",fontSize:12,color:"#ff4444"}} onClick={()=>onDelete(entry.id)}>YES</button>
+              <button className="btn btn-ghost" style={{padding:"4px 10px",fontSize:12}} onClick={()=>setConfirming(false)}>NO</button>
             </>
-            :<button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:10,color:"var(--muted)",opacity:0.5}} onClick={()=>setConfirming(true)}>✕</button>
+            :<button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12,color:"var(--muted)",opacity:0.5}} onClick={()=>setConfirming(true)}>✕</button>
           }
           <button onClick={e=>{e.stopPropagation();setOpen(!open);}} className={`chevron chevron-btn ${open?"open":""}`} aria-label={open?"Collapse session":"Expand session"} title={open?"Collapse":"Expand"}>▼</button>
         </div>
@@ -1818,7 +1826,7 @@ function HistoryItem({entry,onDelete}){
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div className="hist-name">{ex.name}</div>
                 {isSafeYoutubeUrl(ex.youtubeUrl)&&(
-                  <a href={ex.youtubeUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--accent2)",textDecoration:"none",flexShrink:0}}>▶ VIDEO</a>
+                  <a href={ex.youtubeUrl} target="_blank" rel="noopener noreferrer" style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent2)",textDecoration:"none",flexShrink:0}}>▶ VIDEO</a>
                 )}
               </div>
               <div className="hist-sets">
@@ -1836,7 +1844,7 @@ function HistoryItem({entry,onDelete}){
                   if(isCardio){
                     sets.filter(s=>s.duration||s.resistance||s.calories).forEach(s=>{
                       const parts=[];
-                      if(s.duration)parts.push(`${s.duration}min`);
+                      if(s.duration){const d=Number(s.duration);parts.push(d>0&&d<1?`${Math.round(d*60)}s`:`${s.duration}min`);}
                       if(s.resistance)parts.push(`lv${s.resistance}`);
                       if(s.calories)parts.push(`${s.calories}cal`);
                       chips.push(<span key={s.id} className="hist-set-chip">{parts.join(" · ")||"–"}</span>);
@@ -1950,18 +1958,18 @@ function OverallGains({history}){
 
       {sessionData.length>=2&&(
         <div style={{marginBottom:20}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Total Volume Per Session</div>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Total Volume Per Session</div>
           <ProgressChart data={sessionData} valueKey="volume" color="var(--accent)" label="Total Volume (all exercises)" unit=""/>
         </div>
       )}
 
       {muscles.length>0&&(
         <div style={{marginBottom:8}}>
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Muscle Group Frequency</div>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Muscle Group Frequency</div>
           {muscles.map(([muscle,count])=>(
             <div key={muscle} style={{marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--text)"}}>{muscle}</span>
+                <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--text)"}}>{muscle}</span>
                 <span style={{fontFamily:"Bebas Neue",fontSize:12,color:"var(--muted)",letterSpacing:1}}>{count} {count===1?"session":"sessions"}</span>
               </div>
               <div style={{height:6,background:"var(--surface2)",borderRadius:3,overflow:"hidden"}}>
@@ -2074,17 +2082,17 @@ function ProgressTab({history}){
         <>
           {isUni&&latest?.maxWeightL!==undefined&&(
             <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:6,padding:"10px 14px",marginBottom:12}}>
-              <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Latest — Left vs Right</div>
+              <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Latest — Left vs Right</div>
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
-                <div><div style={{fontFamily:"Bebas Neue",fontSize:26,color:"var(--accent)"}}>{latest.maxWeightL}lb</div><div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>LEFT</div></div>
+                <div><div style={{fontFamily:"Bebas Neue",fontSize:26,color:"var(--accent)"}}>{latest.maxWeightL}lb</div><div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)"}}>LEFT</div></div>
                 <div style={{fontFamily:"IBM Plex Mono",fontSize:18,color:"var(--border)"}}>/</div>
-                <div><div style={{fontFamily:"Bebas Neue",fontSize:26,color:"var(--muted)"}}>{latest.maxWeightR}lb</div><div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>RIGHT</div></div>
+                <div><div style={{fontFamily:"Bebas Neue",fontSize:26,color:"var(--muted)"}}>{latest.maxWeightR}lb</div><div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)"}}>RIGHT</div></div>
                 {latest.maxWeightL&&latest.maxWeightR&&(
                   <div style={{marginLeft:"auto",textAlign:"right"}}>
                     <div style={{fontFamily:"Bebas Neue",fontSize:18,color:latest.maxWeightL>=latest.maxWeightR?"var(--accent)":"var(--accent2)"}}>
                       {latest.maxWeightL>=latest.maxWeightR?"BALANCED":`${latest.maxWeightR-latest.maxWeightL}lb GAP`}
                     </div>
-                    <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>L vs R</div>
+                    <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)"}}>L vs R</div>
                   </div>
                 )}
               </div>
@@ -2100,7 +2108,7 @@ function ProgressTab({history}){
             <div className="prog-stat"><div className="prog-stat-val">{dataPoints.length}</div><div className="prog-stat-lbl">Sessions</div></div>
             <div className="prog-stat">
               <div className="prog-stat-val" style={{color:weightDelta===null?"var(--accent)":weightDelta>0?"var(--accent)":weightDelta<0?"var(--danger)":"var(--muted)",fontSize:18,paddingTop:4}}>
-                {weightDelta===null?"–":weightDelta>0?`+${weightDelta}`:weightDelta===0?"=":weightDelta}<span style={{fontSize:10}}>{deltaLabel}</span>
+                {weightDelta===null?"–":weightDelta>0?`+${weightDelta}`:weightDelta===0?"=":weightDelta}<span style={{fontSize:12}}>{deltaLabel}</span>
               </div>
               <div className="prog-stat-lbl">vs Last</div>
             </div>
@@ -2124,12 +2132,12 @@ function ProgressTab({history}){
             return(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
               <div>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{d.shortDate}</div>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{subtitle}</div>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--text)"}}>{d.shortDate}</div>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:2}}>{subtitle}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontFamily:"Bebas Neue",fontSize:18,color:"var(--accent)",letterSpacing:1}}>{primary}</div>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)"}}>{volTag}</div>
+                <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)"}}>{volTag}</div>
               </div>
             </div>
             );
@@ -2157,17 +2165,17 @@ function CardioEquipmentModal({selected,onSave,onClose,gymType}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:24,width:"100%",maxWidth:360}}>
         <div style={{fontFamily:"Bebas Neue",fontSize:20,letterSpacing:3,color:"var(--accent)",marginBottom:4}}>CARDIO EQUIPMENT</div>
-        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:20}}>SELECT WHAT YOUR GYM HAS — USED FOR ACTIVE REST BURSTS</div>
+        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1,marginBottom:20}}>SELECT WHAT YOUR GYM HAS — USED FOR ACTIVE REST BURSTS</div>
         {sorted.map(eq=>{const isUnlikely=unlikely.has(eq);return(
           <div key={eq} onClick={()=>toggle(eq)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)",cursor:"pointer",opacity:isUnlikely?0.55:1}}>
             <div style={{width:18,height:18,borderRadius:4,border:"2px solid",borderColor:choices.includes(eq)?"var(--accent)":"var(--muted)",background:choices.includes(eq)?"var(--accent)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               {choices.includes(eq)&&<span style={{color:"#000",fontSize:12,fontWeight:"bold"}}>✓</span>}
             </div>
-            <span style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{eq}</span>
-            {isUnlikely&&<span style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginLeft:"auto"}}>UNLIKELY</span>}
+            <span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--text)"}}>{eq}</span>
+            {isUnlikely&&<span style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1,marginLeft:"auto"}}>UNLIKELY</span>}
           </div>);})}
         <button className="btn btn-accent" style={{width:"100%",marginTop:20,padding:12}} onClick={()=>{saveCardioEquipment(choices);onSave(choices);onClose();}}>SAVE</button>
-        <button className="btn btn-ghost" style={{width:"100%",marginTop:8,padding:10,fontSize:11}} onClick={onClose}>CANCEL</button>
+        <button className="btn btn-ghost" style={{width:"100%",marginTop:8,padding:10,fontSize:12}} onClick={onClose}>CANCEL</button>
       </div>
     </div>
   );
@@ -2204,7 +2212,7 @@ function PlaylistModal({playlists,activePlaylist,onSave,onClose}){
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:20,width:"100%",maxWidth:400,marginTop:8}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
           <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2,color:"var(--accent)"}}>PLAYLISTS</div>
-          <button className="btn btn-ghost" style={{fontSize:10,letterSpacing:1}} onClick={()=>setAdding(a=>!a)}>{adding?"CANCEL":"+ ADD"}</button>
+          <button className="btn btn-ghost" style={{fontSize:12,letterSpacing:1}} onClick={()=>setAdding(a=>!a)}>{adding?"CANCEL":"+ ADD"}</button>
         </div>
 
         {adding&&(
@@ -2214,7 +2222,7 @@ function PlaylistModal({playlists,activePlaylist,onSave,onClose}){
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
               {PLAYLIST_TAGS.map(tag=>(
                 <button key={tag} onClick={()=>setNewTags(t=>t.includes(tag)?t.filter(x=>x!==tag):[...t,tag])}
-                  style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,padding:"3px 8px",borderRadius:4,cursor:"pointer",
+                  style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1,padding:"3px 8px",borderRadius:4,cursor:"pointer",
                     background:newTags.includes(tag)?"var(--accent)":"var(--surface)",
                     color:newTags.includes(tag)?"#0a0a0a":"var(--muted)",
                     border:"1px solid",borderColor:newTags.includes(tag)?"var(--accent)":"var(--border)"}}>
@@ -2222,14 +2230,14 @@ function PlaylistModal({playlists,activePlaylist,onSave,onClose}){
                 </button>
               ))}
             </div>
-            <button className="btn btn-accent" style={{width:"100%",padding:10,fontSize:11,letterSpacing:2}} onClick={saveNew}>
+            <button className="btn btn-accent" style={{width:"100%",padding:10,fontSize:12,letterSpacing:2}} onClick={saveNew}>
               {editIdx!==null?"SAVE CHANGES":"ADD PLAYLIST"}
             </button>
           </div>
         )}
 
         {list.length===0&&!adding&&(
-          <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",textAlign:"center",padding:"24px 0"}}>No playlists yet — tap + ADD to get started</div>
+          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",textAlign:"center",padding:"24px 0"}}>No playlists yet — tap + ADD to get started</div>
         )}
 
         {list.map((p,i)=>(
@@ -2244,13 +2252,13 @@ function PlaylistModal({playlists,activePlaylist,onSave,onClose}){
                 </div>
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
-                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:10}} onClick={()=>startEdit(p,i)}>✏</button>
-                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:10,color:"#ff4444"}} onClick={()=>remove(i)}>✕</button>
+                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12}} onClick={()=>startEdit(p,i)}>✏</button>
+                <button className="btn btn-ghost" style={{padding:"4px 8px",fontSize:12,color:"#ff4444"}} onClick={()=>remove(i)}>✕</button>
               </div>
             </div>
             <div style={{display:"flex",gap:6}}>
-              <button className="btn btn-accent" style={{flex:1,padding:"8px",fontSize:10,letterSpacing:2}} onClick={()=>launch(p)}>▶ PLAY</button>
-              <button onClick={()=>setAsActive(p)} style={{flex:1,padding:"8px",fontSize:10,letterSpacing:1,fontFamily:"IBM Plex Mono",cursor:"pointer",borderRadius:6,border:"1px solid",borderColor:active?.id===p.id?"var(--accent)":"var(--border)",background:active?.id===p.id?"var(--accent)":"none",color:active?.id===p.id?"#0a0a0a":"var(--muted)"}}>
+              <button className="btn btn-accent" style={{flex:1,padding:"8px",fontSize:12,letterSpacing:2}} onClick={()=>launch(p)}>▶ PLAY</button>
+              <button onClick={()=>setAsActive(p)} style={{flex:1,padding:"8px",fontSize:12,letterSpacing:1,fontFamily:"IBM Plex Mono",cursor:"pointer",borderRadius:6,border:"1px solid",borderColor:active?.id===p.id?"var(--accent)":"var(--border)",background:active?.id===p.id?"var(--accent)":"none",color:active?.id===p.id?"#0a0a0a":"var(--muted)"}}>
                 {active?.id===p.id?"★ ACTIVE":"☆ SET ACTIVE"}
               </button>
             </div>
@@ -2258,8 +2266,8 @@ function PlaylistModal({playlists,activePlaylist,onSave,onClose}){
         ))}
 
         <div style={{display:"flex",gap:8,marginTop:14}}>
-          {active&&<button className="btn btn-accent" style={{flex:1,padding:12,fontSize:11,letterSpacing:2}} onClick={()=>window.open(active.url,"_blank")}>▶ PLAY ACTIVE</button>}
-          <button className="btn btn-ghost" style={{flex:1,padding:12,fontSize:11,letterSpacing:2}} onClick={()=>{onSave(list,active);onClose();}}>SAVE & CLOSE</button>
+          {active&&<button className="btn btn-accent" style={{flex:1,padding:12,fontSize:12,letterSpacing:2}} onClick={()=>window.open(active.url,"_blank")}>▶ PLAY ACTIVE</button>}
+          <button className="btn btn-ghost" style={{flex:1,padding:12,fontSize:12,letterSpacing:2}} onClick={()=>{onSave(list,active);onClose();}}>SAVE & CLOSE</button>
         </div>
       </div>
     </div>
@@ -2273,11 +2281,11 @@ function DataModal({onClose,onImportDone}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:24,width:"100%",maxWidth:340}}>
         <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>BACKUP & RESTORE</div>
-        <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:20}}>Export all your data or restore from a backup file.</div>
-        <button className="btn btn-accent" style={{width:"100%",padding:12,marginBottom:10,fontSize:11,letterSpacing:2}} onClick={()=>{exportData();setStatus("exported");}}>
+        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1,marginBottom:20}}>Export all your data or restore from a backup file.</div>
+        <button className="btn btn-accent" style={{width:"100%",padding:12,marginBottom:10,fontSize:12,letterSpacing:2}} onClick={()=>{exportData();setStatus("exported");}}>
           ↓ EXPORT BACKUP
         </button>
-        <button className="btn btn-ghost" style={{width:"100%",padding:12,marginBottom:10,fontSize:11,letterSpacing:2}} onClick={()=>fileRef.current.click()}>
+        <button className="btn btn-ghost" style={{width:"100%",padding:12,marginBottom:10,fontSize:12,letterSpacing:2}} onClick={()=>fileRef.current.click()}>
           ↑ IMPORT BACKUP
         </button>
         <input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>{
@@ -2289,10 +2297,10 @@ function DataModal({onClose,onImportDone}){
           });
           e.target.value="";
         }}/>
-        {status==="exported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--accent)",textAlign:"center",marginBottom:8}}>✓ Backup downloaded</div>}
-        {status==="imported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--accent)",textAlign:"center",marginBottom:8}}>✓ Data restored — reload the app</div>}
-        {status&&status!=="exported"&&status!=="imported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"#ff4444",textAlign:"center",marginBottom:8}}>Error: {status}</div>}
-        <button className="btn btn-ghost" style={{width:"100%",padding:10,fontSize:11,letterSpacing:2,marginTop:4}} onClick={onClose}>CLOSE</button>
+        {status==="exported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",textAlign:"center",marginBottom:8}}>✓ Backup downloaded</div>}
+        {status==="imported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--accent)",textAlign:"center",marginBottom:8}}>✓ Data restored — reload the app</div>}
+        {status&&status!=="exported"&&status!=="imported"&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"#ff4444",textAlign:"center",marginBottom:8}}>Error: {status}</div>}
+        <button className="btn btn-ghost" style={{width:"100%",padding:10,fontSize:12,letterSpacing:2,marginTop:4}} onClick={onClose}>CLOSE</button>
       </div>
     </div>
   );
@@ -2327,13 +2335,13 @@ class ErrorBoundary extends React.Component{
           The app hit an error and stopped rendering. Your logged workouts are still saved on this device. Back them up first, then try reloading.
         </div>
         <div style={{background:"#131313",border:"1px solid #2a2a2a",borderRadius:8,padding:"12px 14px",marginBottom:24}}>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,letterSpacing:2,color:"#666",textTransform:"uppercase",marginBottom:6}}>Error detail</div>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#ff3535",wordBreak:"break-word",lineHeight:1.4}}>{this.state.message}</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,color:"#666",textTransform:"uppercase",marginBottom:6}}>Error detail</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#ff3535",wordBreak:"break-word",lineHeight:1.4}}>{this.state.message}</div>
         </div>
         <button onClick={this.handleBackup} style={{width:"100%",padding:14,marginBottom:10,background:"#c8f135",color:"#000",border:"none",borderRadius:8,fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:2,cursor:"pointer"}}>⬇ BACK UP MY DATA</button>
-        <button onClick={this.handleReload} style={{width:"100%",padding:12,marginBottom:10,background:"transparent",color:"#f0f0f0",border:"1px solid #2a2a2a",borderRadius:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}}>↺ RELOAD APP</button>
-        <button onClick={this.handleClearDraft} style={{width:"100%",padding:12,background:"transparent",color:"#666",border:"1px solid #2a2a2a",borderRadius:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,letterSpacing:1,cursor:"pointer"}}>CLEAR UNSAVED DRAFT &amp; RELOAD</button>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#444",letterSpacing:1,marginTop:16,lineHeight:1.6}}>
+        <button onClick={this.handleReload} style={{width:"100%",padding:12,marginBottom:10,background:"transparent",color:"#f0f0f0",border:"1px solid #2a2a2a",borderRadius:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}}>↺ RELOAD APP</button>
+        <button onClick={this.handleClearDraft} style={{width:"100%",padding:12,background:"transparent",color:"#666",border:"1px solid #2a2a2a",borderRadius:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:1,cursor:"pointer"}}>CLEAR UNSAVED DRAFT &amp; RELOAD</button>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#444",letterSpacing:1,marginTop:16,lineHeight:1.6}}>
           If reloading keeps failing, "Clear unsaved draft" removes the in-progress session that may be causing the crash. Your saved history is not affected.
         </div>
       </div>
@@ -2677,6 +2685,16 @@ function GymTracker(){
       if(Rcomplete&&!Lcomplete){delete out.weightL;delete out.repsL;}
       return out;
     };
+    // Strip empty keys so a cardio or bodyweight row doesn't carry weight:"" / reps:"" into
+    // History, where it would clutter the shape and could confuse legacy readers.
+    const stripEmptyKeys=s=>{
+      const out={...s};
+      Object.keys(out).forEach(k=>{
+        if(k==="id"||k==="_pending")return;
+        if(out[k]===""||out[k]===null||out[k]===undefined)delete out[k];
+      });
+      return out;
+    };
     // Build a per-set audit: for each dropped set that had typed values, record exercise + index + why.
     // A fully cleared row (every value blank or 0 and not pending) is dropped silently — the user
     // never meant to log it. Rows with typed content, OR an unconfirmed copied row that still carries
@@ -2714,16 +2732,36 @@ function GymTracker(){
         droppedSetNotes.push(`${ex.name||"exercise"} set ${i+1}`);
       });
     });
-    const withCleanedSets=localExercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(s=>hasAnyData(s,ex.name)).map(s=>(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s)}));
+    // Track single-side L/R sets so the save warning can mention them explicitly. These SAVE as
+    // single-side, but the user should know we dropped the other side.
+    const singleSideNotes=[];
+    localExercises.forEach(ex=>{
+      (ex.sets||[]).forEach((s,i)=>{
+        if(s.weightL===undefined&&s.weightR===undefined)return;
+        if(!hasAnyData(s,ex.name))return;
+        const Lcomplete=nz(s.weightL)&&nz(s.repsL);
+        const Rcomplete=nz(s.weightR)&&nz(s.repsR);
+        if(Lcomplete&&!Rcomplete)singleSideNotes.push(`${ex.name||"exercise"} set ${i+1} (R empty)`);
+        else if(Rcomplete&&!Lcomplete)singleSideNotes.push(`${ex.name||"exercise"} set ${i+1} (L empty)`);
+      });
+    });
+    const withCleanedSets=localExercises.map(ex=>({...ex,sets:(ex.sets||[]).filter(s=>hasAnyData(s,ex.name)).map(s=>{
+      const stepA=(s.weightL!==undefined||s.weightR!==undefined)?stripIncompleteSide(s):s;
+      return stripEmptyKeys(stepA);
+    })}));
     const droppedExerciseNames=withCleanedSets.filter(ex=>ex.sets.length===0).map(ex=>ex.name).filter(Boolean);
     const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
-    // Warn only when there's genuinely dropped-partial content or whole exercises falling out.
-    if(droppedSetNotes.length>0||droppedExerciseNames.length>0){
+    // Warn only when there's genuinely dropped-partial content or whole exercises falling out, or
+    // when a unilateral set is going in with only one side logged.
+    if(droppedSetNotes.length>0||droppedExerciseNames.length>0||singleSideNotes.length>0){
       const parts=[];
       if(droppedExerciseNames.length>0){
         parts.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data (${droppedExerciseNames.join(", ")})`);
+      }
+      if(singleSideNotes.length>0){
+        parts.push(`${singleSideNotes.length} single-side ${singleSideNotes.length===1?"set":"sets"} (${singleSideNotes.join(", ")}) — will save with the empty side dropped`);
       }
       if(droppedSetNotes.length>0){
         parts.push(`${droppedSetNotes.length} partial ${droppedSetNotes.length===1?"set":"sets"} (${droppedSetNotes.join(", ")})`);
@@ -3134,9 +3172,9 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 <>This link contains an API key for the AI features. Save it to this device? Only accept if the link came from a source you trust.</>
               )}
             </div>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"var(--muted)",background:"var(--surface2)",padding:"8px 10px",borderRadius:4,marginBottom:14,wordBreak:"break-all"}}>Key starts: <b style={{color:"var(--text)"}}>{pendingHashKey.slice(0,12)}…</b></div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"var(--muted)",background:"var(--surface2)",padding:"8px 10px",borderRadius:4,marginBottom:14,wordBreak:"break-all"}}>Key starts: <b style={{color:"var(--text)"}}>{pendingHashKey.slice(0,12)}…</b></div>
             <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={acceptPendingHashKey}>{apiKey?"REPLACE KEY":"SAVE & USE THIS KEY"}</button>
-            <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={rejectPendingHashKey}>CANCEL — DON'T USE THIS KEY</button>
+            <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={rejectPendingHashKey}>CANCEL — DON'T USE THIS KEY</button>
             <div className="key-note" style={{marginTop:12}}>LINK KEYS ARE A COMMON PHISHING VECTOR · CONFIRM THE SENDER</div>
           </div>
         </div>
@@ -3151,7 +3189,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
           <div className="header-top">
             <div className="logo">90STRONG</div>
             <div className="logo-sub">Workout Tracker</div>
-            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button className="header-key" style={{marginLeft:0,fontSize:12,fontFamily:"IBM Plex Mono",letterSpacing:1}} title="Set Bodyweight" onClick={handleSetBodyweight}>{(()=>{const bw=profile.bodyweight||loadBodyweight();if(!bw||bw<=0)return"BW";const str=String(bw);return`${str} BW`;})()}</button>
               <button className="header-key" style={{marginLeft:0,fontSize:12,fontFamily:"IBM Plex Mono",letterSpacing:1,color:intensityLevel===1?"var(--muted)":intensityLevel===2?"var(--accent)":"var(--accent2)",fontWeight:"bold"}} title={intensityLevel===1?"Mode: L1 Standard AI — tap to change":intensityLevel===2?"Mode: L2 High-Intensity AI — tap to change":"Mode: L3 Circuit (no AI) — tap to change"} onClick={()=>{const nl=intensityLevel===3?1:intensityLevel+1;const wasL3=intensityLevel===3;setIntensityLevel(nl);saveIntensityLevel(nl);if(nl===3)setTab("lvl3");else if(wasL3&&tab==="lvl3")setTab("log");}}>LVL{intensityLevel}</button>
               <button className="header-key" style={{marginLeft:0,opacity:playlists.length>0?1:0.35}} title="Playlists" onClick={()=>setShowPlaylistModal(true)}>🎵</button>
@@ -3233,7 +3271,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                       {restDoneFlash&&(
                         <div className="session-rest-done" onClick={()=>setRestDoneFlash(false)}>
                           <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2}}>⚡ REST DONE — GO</div>
-                          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,marginTop:2,opacity:0.8}}>tap to dismiss</div>
+                          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,marginTop:2,opacity:0.8}}>tap to dismiss</div>
                         </div>
                       )}
                     </>
@@ -3241,7 +3279,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 </div>
               );
             })()}
-            {wasRestoredFromDraft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
+            {wasRestoredFromDraft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
             {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
             {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10}} onClick={()=>setManualAdd(true)}>+ Add an exercise to this plan</button>}
             {(!loadedFromAI||manualAdd)&&(
@@ -3353,7 +3391,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div style={{display:"flex",gap:6,marginBottom:10}}>
               {["Auto","Push","Pull","Legs"].map(f=>(
                 <button key={f} onClick={()=>setFocusOverride(f==="Auto"?null:f)}
-                  style={{flex:1,padding:"8px 4px",fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:1,
+                  style={{flex:1,padding:"8px 4px",fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1,
                     cursor:"pointer",borderRadius:6,border:"1px solid",
                     borderColor:(f==="Auto"?focusOverride===null:focusOverride===f)?"var(--accent)":"var(--border)",
                     background:(f==="Auto"?focusOverride===null:focusOverride===f)?"rgba(188,255,0,0.1)":"none",
@@ -3381,7 +3419,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
                 {aiPlan.supersets?.map((ss,i)=>(
                   <div key={i} style={{marginBottom:14}}>
-                    <div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:3,color:"var(--accent)",textTransform:"uppercase",marginBottom:6}}>
+                    <div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:3,color:"var(--accent)",textTransform:"uppercase",marginBottom:6}}>
                       Superset {ss.pair} — A then B, no rest between
                     </div>
                     <div className="plan-exercise" style={{borderLeft:"3px solid var(--accent)",marginBottom:4}}>
@@ -3412,7 +3450,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                       </div>
                       {ss.b?.tip&&<div className="plan-rationale">{ss.b.tip}</div>}
                     </div>
-                    <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",letterSpacing:1,padding:"6px 10px",background:"var(--surface2)",borderRadius:4,textAlign:"center"}}>
+                    <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",letterSpacing:1,padding:"6px 10px",background:"var(--surface2)",borderRadius:4,textAlign:"center"}}>
                       ⏱ REST {ss.restSeconds||75}s after completing both exercises
                     </div>
                   </div>
@@ -3420,7 +3458,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
                 {aiPlan.finisher?.exercises?.length>0&&(
                   <div style={{marginBottom:14}}>
-                    <div style={{fontFamily:"IBM Plex Mono",fontSize:9,letterSpacing:3,color:"var(--accent2)",textTransform:"uppercase",marginBottom:6}}>
+                    <div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:3,color:"var(--accent2)",textTransform:"uppercase",marginBottom:6}}>
                       🔥 {aiPlan.finisher.name||"10-Min Finisher"} — spike your heart rate
                     </div>
                     {aiPlan.finisher.exercises.map((ex,i)=>(
@@ -3451,17 +3489,17 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 {(aiPlan.supersets?.length>0||aiPlan.exercises?.length>0)&&(
                   <>
                     <button className="load-workout-btn" onClick={loadPlanIntoLog}>START THIS WORKOUT →</button>
-                    <button onClick={refreshAiRecommendation} disabled={aiLoading} style={{width:"100%",padding:"10px",marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:10,letterSpacing:2,cursor:"pointer"}}>↺ DIFFERENT EXERCISES</button>
+                    <button onClick={refreshAiRecommendation} disabled={aiLoading} style={{width:"100%",padding:"10px",marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:2,cursor:"pointer"}}>↺ DIFFERENT EXERCISES</button>
                   </>
                 )}
 
                 {!aiPlan.supersets&&!aiPlan.exercises?.length&&(
-                  <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--danger)",padding:"12px 0"}}>No exercises returned. Try tapping BUILD MY NEXT WORKOUT again.</div>
+                  <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--danger)",padding:"12px 0"}}>No exercises returned. Try tapping BUILD MY NEXT WORKOUT again.</div>
                 )}
               </>
             )}
             {aiError&&!aiLoading&&(
-              <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--danger)",padding:"16px 0",textAlign:"center"}}>{aiError}</div>
+              <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--danger)",padding:"16px 0",textAlign:"center"}}>{aiError}</div>
             )}
             {!aiPlan&&!aiLoading&&!aiError&&(
               <div className="empty-state"><span className="empty-icon">🤖</span>Claude will analyze your history and build<br/>a superset-based workout plan tuned to your profile.</div>
@@ -3471,15 +3509,15 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
         {tab==="lvl3"&&(
           <div className="content">
             <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>LVL3 · CIRCUITS</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:16,lineHeight:1.5}}>Build a circuit from exercises across your videos. Continuous flow, tracked over time.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:16,lineHeight:1.5}}>Build a circuit from exercises across your videos. Continuous flow, tracked over time.</div>
 
             {lvl3View==="list"&&(<>
               <button className="btn btn-accent" style={{width:"100%",marginBottom:14}} onClick={startNewLvl3Session} disabled={lvl3Pool.length===0}>+ NEW CIRCUIT SESSION</button>
-              {lvl3Pool.length===0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",textAlign:"center",padding:"20px",lineHeight:1.6}}>No exercises yet.<br/>Add exercises to your videos in PLAY, then start a circuit here.</div>}
-              {lvl3Pool.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:14}}>Pool: {lvl3Pool.length} {lvl3Pool.length===1?"exercise":"exercises"} across {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size} {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size===1?"video":"videos"}</div>}
+              {lvl3Pool.length===0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",textAlign:"center",padding:"20px",lineHeight:1.6}}>No exercises yet.<br/>Add exercises to your videos in PLAY, then start a circuit here.</div>}
+              {lvl3Pool.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:14}}>Pool: {lvl3Pool.length} {lvl3Pool.length===1?"exercise":"exercises"} across {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size} {new Set(lvl3Pool.map(p=>p.sourceVideoId)).size===1?"video":"videos"}</div>}
 
               <div className="section-label">Past Sessions</div>
-              {lvl3Sessions.length===0&&<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:11}}>No sessions yet.</div>}
+              {lvl3Sessions.length===0&&<div style={{textAlign:"center",padding:"20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No sessions yet.</div>}
               {lvl3Sessions.map(s=>{
                 const done=s.entries.filter(e=>e.done).length;
                 const date=new Date(s.ts).toLocaleDateString("en-US",{month:"short",day:"numeric"});
@@ -3488,7 +3526,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div>
                       <div style={{fontFamily:"Bebas Neue",fontSize:16,color:"var(--accent)",letterSpacing:1}}>{date}</div>
-                      <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:2}}>{s.entries.length} {s.entries.length===1?"exercise":"exercises"} · {done} logged</div>
+                      <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:2}}>{s.entries.length} {s.entries.length===1?"exercise":"exercises"} · {done} logged</div>
                     </div>
                     <button onClick={e=>{e.stopPropagation();deleteLvl3Session(s.id);}} className="vid-card-btn danger" title="Delete">✕</button>
                   </div>
@@ -3496,10 +3534,10 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                     {s.entries.map(e=>(
                       <div key={e.id} className="lvl3-detail-row">
                         <div style={{flex:1}}>
-                          <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--text)"}}>{e.name}</div>
-                          <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
+                          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--text)"}}>{e.name}</div>
+                          <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
                         </div>
-                        <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:e.done?"var(--accent)":"var(--muted)"}}>
+                        <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:e.done?"var(--accent)":"var(--muted)"}}>
                           {e.done?`${e.weight?e.weight+"lb × ":""}${e.reps||"–"} reps`:"skipped"}
                         </div>
                       </div>
@@ -3512,10 +3550,10 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
             {lvl3View==="build"&&lvl3Draft&&(<>
               <div className="section-label">Building Session ({lvl3Draft.entries.length})</div>
-              {lvl3Draft.entries.length===0&&<div style={{color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:11,padding:"10px 0",fontStyle:"italic"}}>Pick exercises from the pool below.</div>}
+              {lvl3Draft.entries.length===0&&<div style={{color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12,padding:"10px 0",fontStyle:"italic"}}>Pick exercises from the pool below.</div>}
               {lvl3Draft.entries.map((e,i)=>(
                 <div key={e.id} className="lvl3-draft-row">
-                  <span style={{color:"var(--muted)",fontSize:10,fontFamily:"IBM Plex Mono",marginRight:6}}>#{i+1}</span>
+                  <span style={{color:"var(--muted)",fontSize:12,fontFamily:"IBM Plex Mono",marginRight:6}}>#{i+1}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div className="lvl3-draft-name">{e.name}</div>
                     <div className="lvl3-draft-src">{e.sourceVideoName}</div>
@@ -3527,7 +3565,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
               ))}
               <div style={{display:"flex",gap:6,marginTop:12,marginBottom:18}}>
                 <button className="btn btn-accent" style={{flex:1}} onClick={startLvl3Workout} disabled={lvl3Draft.entries.length===0}>START WORKOUT →</button>
-                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={cancelLvl3Draft}>CANCEL</button>
+                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={cancelLvl3Draft}>CANCEL</button>
               </div>
               <div className="section-label">Exercise Pool</div>
               {(()=>{
@@ -3550,14 +3588,14 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
 
             {lvl3View==="workout"&&lvl3Draft&&(<>
               <div className="section-label">Workout In Progress</div>
-              <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:12}}>Log each exercise as you finish it. Tap DONE to mark complete.</div>
+              <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:12}}>Log each exercise as you finish it. Tap DONE to mark complete.</div>
               {lvl3Draft.entries.map((e,i)=>(
                 <div key={e.id} className={"lvl3-workout-row"+(e.done?" done":"")}>
                   <div className="lvl3-workout-header">
-                    <span style={{color:"var(--muted)",fontSize:10,fontFamily:"IBM Plex Mono",marginRight:8}}>#{i+1}</span>
+                    <span style={{color:"var(--muted)",fontSize:12,fontFamily:"IBM Plex Mono",marginRight:8}}>#{i+1}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontFamily:"'IBM Plex Sans',sans-serif",fontSize:13,fontWeight:600,color:e.done?"var(--muted)":"var(--text)",textDecoration:e.done?"line-through":"none"}}>{e.name}</div>
-                      <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
+                      <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:1}}>from {e.sourceVideoName}</div>
                     </div>
                   </div>
                   <div className="lvl3-workout-inputs">
@@ -3566,16 +3604,16 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                     <input className="set-input" type="number" inputMode="numeric" placeholder="reps" value={e.reps} onChange={ev=>updateLvl3Entry(e.id,{reps:ev.target.value})} style={{maxWidth:70}} disabled={e.done}/>
                     <span className="set-label" style={{fontSize:8}}>REPS</span>
                     {!e.done?(
-                      <button className="btn btn-accent" style={{marginLeft:"auto",padding:"6px 12px",fontSize:10,letterSpacing:2}} onClick={()=>updateLvl3Entry(e.id,{done:true})}>DONE</button>
+                      <button className="btn btn-accent" style={{marginLeft:"auto",padding:"6px 12px",fontSize:12,letterSpacing:2}} onClick={()=>updateLvl3Entry(e.id,{done:true})}>DONE</button>
                     ):(
-                      <button style={{marginLeft:"auto",background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"6px 10px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={()=>updateLvl3Entry(e.id,{done:false})}>UNDO</button>
+                      <button style={{marginLeft:"auto",background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"6px 10px",fontSize:12,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={()=>updateLvl3Entry(e.id,{done:false})}>UNDO</button>
                     )}
                   </div>
                 </div>
               ))}
               <div style={{display:"flex",gap:6,marginTop:14}}>
                 <button className="btn btn-accent" style={{flex:1}} onClick={saveLvl3Session}>SAVE SESSION</button>
-                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:2,cursor:"pointer"}} onClick={()=>setLvl3View("build")}>← BACK</button>
+                <button style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",padding:"10px 16px",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={()=>setLvl3View("build")}>← BACK</button>
               </div>
             </>)}
           </div>
@@ -3583,7 +3621,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
         {tab==="about"&&(
           <div className="content help-tab">
             <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>ABOUT 90STRONG</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A personal gym-tracking app, honestly built and shared.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A personal gym-tracking app, honestly built and shared.</div>
 
             <div className="help-p">90Strong is a personal gym-tracking web app originally built for one lifter and opened up for anyone who wants to try it. There's no signup, no ads, no cloud. Everything you log stays in your browser, on your device.</div>
 
@@ -3619,13 +3657,13 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p">Tap <b>👤</b> in the header to tune the AI to <b>you</b> — priority muscle, dominant side, dumbbell max, bodyweight, session time budget, preferred progression increments, and freeform notes. All fields optional; defaults are neutral.</div>
             <div className="help-p">Videos play inline where the YouTube creator has enabled embedding — most do, occasionally one won't.</div>
 
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>Built as a personal project · Feedback welcome · Polish is ongoing</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>Built as a personal project · Feedback welcome · Polish is ongoing</div>
           </div>
         )}
         {tab==="help"&&(
           <div className="content help-tab">
             <div style={{fontFamily:"Bebas Neue",fontSize:26,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>WELCOME TO 90STRONG</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:11,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A gym-tracking app built around variety and honest progression. No coaching fluff — just log your work, watch it trend, and let the AI mix up your plans when you want a change.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:18,lineHeight:1.5}}>A gym-tracking app built around variety and honest progression. No coaching fluff — just log your work, watch it trend, and let the AI mix up your plans when you want a change.</div>
 
             <div className="section-label">Getting Started</div>
             <div className="help-p">Tap <b>LOG</b> to record a session from scratch, or <b>AI REC</b> to have Claude build one for you based on what you've done recently. Everything you log is saved on your device automatically — no account, no cloud, no sign-in.</div>
@@ -3638,7 +3676,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>Weight progression.</b> Hit all reps → the AI adds weight next time. Miss once → it holds. Miss two sessions in a row → it drops the weight one increment so you can rebuild. Deloads are normal.</div>
             <div className="help-p"><b>Time budget.</b> Set a session time budget in your profile (👤) and the AI will size the plan to fit — fewer superset pairs and a shorter finisher when you're busy.</div>
             <div className="help-p"><b>HISTORY</b> — every past session, newest first. Tap any session to see what you did. Back up your data via the <b>💾</b> button in the header — details below.</div>
-            <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations. Elevate Core shows level progression.</div>
+            <div className="help-p"><b>GAINS</b> — pick any exercise and see your weight, reps, or seconds trending over time. Bodyweight moves show rep trends. Timed moves show hold durations.{profile.gymType==="planet-fitness"?" Elevate Core shows level progression.":""}</div>
             <div className="help-p"><b>AI REC</b> — Claude builds a superset-based workout tuned to your gym and profile. Pick your focus (Auto / Push / Pull / Legs). Tap <b>START THIS WORKOUT</b> to load it into LOG.</div>
             <div className="help-p"><b>HELP</b> — you're here.</div>
 
@@ -3686,23 +3724,23 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>Can I use this offline?</b> Partly. While the browser tab stays open, LOG and HISTORY continue to work with no network. A cold reload needs internet (the app isn't cached offline). AI generation always needs internet.</div>
             <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
 
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
           </div>
         )}
         {tab==="play"&&(
           <div className="content">
             <div style={{fontFamily:"Bebas Neue",fontSize:22,letterSpacing:2,color:"var(--accent)",marginBottom:4}}>VIDEO LIBRARY</div>
-            <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginBottom:16,lineHeight:1.5}}>Saved workout videos. Tap one to play — it loops automatically and follows you across tabs so you can log while it plays.</div>
+            <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginBottom:16,lineHeight:1.5}}>Saved workout videos. Tap one to play — it loops automatically and follows you across tabs so you can log while it plays.</div>
 
             <div className="section-label">Add a Video</div>
             <input className="input" style={{marginBottom:8}} placeholder="Paste a YouTube URL (Shorts or watch link)" value={newVideoUrl} onChange={e=>{setNewVideoUrl(e.target.value);setVideoAddError("");}}/>
             <input className="input" style={{marginBottom:8}} placeholder="Name it (e.g. 'DB combo #3')" value={newVideoName} onChange={e=>setNewVideoName(e.target.value)}/>
-            <textarea className="input" style={{marginBottom:8,resize:"vertical",minHeight:60,fontFamily:"'IBM Plex Mono',monospace",fontSize:11}} placeholder="Optional: notes / exercise list (e.g. Lateral Raise, Curl to Press, Reverse Fly)" value={newVideoNotes} onChange={e=>setNewVideoNotes(e.target.value)} rows={2}/>
+            <textarea className="input" style={{marginBottom:8,resize:"vertical",minHeight:60,fontFamily:"'IBM Plex Mono',monospace",fontSize:12}} placeholder="Optional: notes / exercise list (e.g. Lateral Raise, Curl to Press, Reverse Fly)" value={newVideoNotes} onChange={e=>setNewVideoNotes(e.target.value)} rows={2}/>
             <button className="btn btn-accent" style={{width:"100%",marginBottom:6}} onClick={addVideo}>ADD TO LIBRARY</button>
-            {videoAddError&&<div style={{color:"var(--danger)",fontFamily:"IBM Plex Mono",fontSize:11,marginBottom:12}}>{videoAddError}</div>}
+            {videoAddError&&<div style={{color:"var(--danger)",fontFamily:"IBM Plex Mono",fontSize:12,marginBottom:12}}>{videoAddError}</div>}
 
             <div className="section-label" style={{marginTop:22}}>Your Videos {videos.length>0&&`(${videos.length})`}</div>
-            {videos.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:"var(--muted)",marginTop:-6,marginBottom:12,lineHeight:1.5}}>Tap a card to play. Reorder with ▲▼ to build a workout sequence.</div>}
+            {videos.length>0&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:-6,marginBottom:12,lineHeight:1.5}}>Tap a card to play. Reorder with ▲▼ to build a workout sequence.</div>}
             {videos.length===0&&<div style={{textAlign:"center",padding:"30px 20px",color:"var(--muted)",fontFamily:"IBM Plex Mono",fontSize:12}}>No videos saved yet. Paste a YouTube URL above to get started.</div>}
             {videos.map((v,i)=>{
               const exercises=v.exercises||[];
@@ -3712,7 +3750,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 <div className="vid-card-top">
                   <div className="vid-card-thumb" style={{backgroundImage:`url(${youtubeThumb(v.videoId)})`}}></div>
                   <div className="vid-card-body" onClick={()=>playVideo(v.id)} style={{cursor:"pointer"}}>
-                    <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:11,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
+                    <div className="vid-card-name"><span style={{color:"var(--muted)",marginRight:6,fontSize:12,fontFamily:"IBM Plex Mono"}}>#{i+1}</span>{v.name}</div>
                     <div className="vid-card-note">{activeVideoId===v.id?"● NOW PLAYING":`Tap to play · ${exercises.length} ${exercises.length===1?"exercise":"exercises"}`}</div>
                   </div>
                   <div className="vid-card-actions">
@@ -3723,7 +3761,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 </div>
                 <div className="vid-exercises">
                   <div className="vid-exercises-label">EXERCISES</div>
-                  {exercises.length===0&&<div style={{color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,fontStyle:"italic",padding:"2px 0 4px"}}>None yet — add one below</div>}
+                  {exercises.length===0&&<div style={{color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,fontStyle:"italic",padding:"2px 0 4px"}}>None yet — add one below</div>}
                   {exercises.map(ex=>(
                     <div key={ex.id} className="vid-ex-row">
                       <span className="vid-ex-name">{ex.name}</span>
@@ -3731,8 +3769,8 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                     </div>
                   ))}
                   <div className="vid-ex-add">
-                    <input type="text" className="input" placeholder="+ Add exercise" value={exInp} onChange={e=>setNewExInputs({...newExInputs,[v.id]:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")addExerciseToVideo(v.id);}} style={{fontSize:11,padding:"6px 8px"}}/>
-                    <button className="btn btn-accent" onClick={()=>addExerciseToVideo(v.id)} disabled={!exInp.trim()} style={{padding:"6px 10px",fontSize:10,letterSpacing:2,opacity:exInp.trim()?1:0.4}}>ADD</button>
+                    <input type="text" className="input" placeholder="+ Add exercise" value={exInp} onChange={e=>setNewExInputs({...newExInputs,[v.id]:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")addExerciseToVideo(v.id);}} style={{fontSize:12,padding:"12px 8px",minHeight:44}}/>
+                    <button className="btn btn-accent" onClick={()=>addExerciseToVideo(v.id)} disabled={!exInp.trim()} style={{padding:"12px 14px",fontSize:12,letterSpacing:2,opacity:exInp.trim()?1:0.4,minHeight:44}}>ADD</button>
                   </div>
                 </div>
                 <div className="vid-tips">
@@ -3740,8 +3778,8 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                     <>
                       <textarea value={tipsDraft} onChange={e=>setTipsDraft(e.target.value)} placeholder="Tips, reminders (e.g. '3 rounds, 30s each')" rows={2} autoFocus/>
                       <div style={{display:"flex",gap:6,marginTop:6}}>
-                        <button className="btn btn-accent" style={{padding:"4px 12px",fontSize:10,letterSpacing:2}} onClick={()=>saveTips(v.id)}>SAVE</button>
-                        <button style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"4px 12px",fontSize:10,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={cancelEditTips}>CANCEL</button>
+                        <button className="btn btn-accent" style={{padding:"4px 12px",fontSize:12,letterSpacing:2}} onClick={()=>saveTips(v.id)}>SAVE</button>
+                        <button style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"4px 12px",fontSize:12,letterSpacing:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onClick={cancelEditTips}>CANCEL</button>
                       </div>
                     </>
                   ):v.tips&&v.tips.trim()?(
