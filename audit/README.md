@@ -1,49 +1,53 @@
-# 90Strong (iron-log) audit: commit 7d10855
+# 90Strong (iron-log) audit: commit a411361
 
-Updated Oct 24, 2026. Commit 7d10855 was pushed at 2:16 PM PT on Oct 20, 2026. This combines three sources:
+Updated Oct 24, 2026. Commit a411361 ("Clean up 11 Low items") was pushed at 5:29 AM PT on Oct 24, 2026, and tested around 6:10 AM PT. This combines three sources:
 
-- A desktop pass on Oct 24, with site data cleared, no AI and 0 console errors (Workouttester1).
+- A desktop pass on Oct 24, with site data cleared, no AI, save pop-ups clicked by hand and 0 console errors (Workouttester1).
 - A phone pass on Oct 24 at 390px wide with no AI (Workouttester2).
-- A code review by Exercise app, which found the live site matches the repo. The tests now run against the app's real code and pass 34 of 34.
+- A code review by Exercise app, which found the live site matches the repo. The tests pass 44 of 44.
 
-**Verdict: shippable.** Nothing High or Medium was confirmed. Everything still open is Low or polish.
+**Verdict: shippable.** There's one Medium layout regression on phone. Everything else still open is Low or polish.
 
 ## Open issues, in priority order
 
 | # | Issue | Severity | Suggested fix |
 |---|---|---|---|
-| 1 | A half-filled left/right set (right side empty) shows the inline "⚠ right side empty" hint while you type (phone), but saving gives no warning (desktop) | Low | Mention single-side sets in the save warning too |
-| 2 | ABOUT and HELP still have Planet Fitness, PF360 and Elevate Core text on desktop. The phone pass saw PF360 gone, but HELP's GAINS line still mentions Elevate Core for every gym type. | Low | Show Planet Fitness text only when gym type is Planet Fitness |
-| 3 | Mountain Climbers saved from a "45 sec" target reads back as "LAST: 0.75min" (phone) | Low | Show times under a minute in seconds |
-| 4 | Typing below an AI weight shows "↓ below last: 45lb" when LAST was 50. It's comparing against the AI's weight but calls it "last" (phone). | Low | Compare against LAST, or label it as the AI target |
-| 5 | An unfilled Jump Rope row in an AI plan saves empty weight and reps fields along with its time. Nothing visible breaks (phone). | Low | Leave out the empty fields on cardio rows |
-| 6 | Muscle tags and the MUSCLES count leave cardio out | Low | Confirm this is intended |
-| 7 | On Treadmill and Bike rows the ✕ wraps onto its own line (phone only, not desktop) | Low | Keep the row on one line |
-| 8 | Some labels are 9–11px | Low | Raise labels to 12px |
-| 9 | Several taps are under 44px: Add an exercise (37px), SCAN MACHINE (40), ADD and the pickers (42), and the YouTube box (27) | Low | Make taps 44px tall |
-| 10 | Remove wraps on AI cards | Low | Keep it on one line |
-| 11 | At about 256px wide, the header ⚙ goes off-screen and AI REC wraps | Low | Let the header shrink or wrap cleanly |
-| 12 | API key stored in plain text. Not a concern until accounts or payments are added. | Backlog | Move the key out of plain storage when accounts arrive |
+| 1 | On Treadmill and Bike rows at 390px, both ✓ and ✕ now drop to a second line under the inputs. This is a regression: before, only ✕ wrapped. This commit put both buttons in one group that can't split (lines 1383–1397). It's fine on desktop, even at 500% zoom. | Medium | Stop the row from wrapping and let the inputs shrink |
+| 2 | Saving a one-side L/R set brings up a blocking pop-up: "Dropping 1 single-side set…", even though the set is kept. Cancel stops the whole save. | Low (should-fix) | Reword it, and make it a note that doesn't block the save |
+| 3 | "+ Add an exercise to this plan" is 37px tall (line 3284), and START SESSION TIMER is 39px | Low (should-fix) | Make taps 44px tall |
+| 4 | Remove still wraps under SWAP on AI cards at 390px. The line 1712 change doesn't fix it at that width. | Low | Keep it on one line |
+| 5 | ABOUT still describes Planet Fitness gear for every gym type (line 3628) | Low | Show it only for Planet Fitness |
+| 6 | The code still has three 8px labels. The phone saw nothing 11px or smaller on the screens it checked. | Low | Raise them to 12px |
+| 7 | At 256px the nav tabs shrink to 37px, and every tab except LOG is cut off with "…". The ⚙ now stays on screen. | Low | Use shorter labels or icons at narrow widths |
+| 8 | **New:** A copied row with both fields cleared is dropped with no message | Low | Warn, or say it was dropped |
+| 9 | **New:** LAST leaves out "lb" (30×8), while History shows "30lb × 8" | Low | Use the same format in both |
+| 10 | API key stored in plain text. Not a concern until accounts or payments are added. | Backlog | Move the key out of plain storage when accounts arrive |
 
-## Fixed or passing in this build
+## Intentional
 
-- Push-Ups with only reps entered saves and shows "BW × 15" in History, including Push-Ups from an AI plan.
-- Mountain Climbers is cardio only, and 3 min reads back as 3min.
-- Cardio ✓ turns "45 sec" into 0.75 min.
-- A target with no unit gets a clear pop-up.
-- A copied row that's never confirmed now gets a save-as-is or drop prompt. This was seen on phone. The desktop run probably auto-dismissed the pop-up, which the code treats as Cancel.
-- A copied row with its numbers cleared warns as partial.
-- The LAST line for a one-side set reads "L30×8", with no R—×—.
-- Each pop-up's wording fits its row type.
-- Switching gym type from Home back to Commercial re-ticks the machines (phone).
-- A bodyweight of 182.5 shows as "182.5 BW" at 12px.
+- Muscle tags and the MUSCLES count leave cardio out on purpose.
+
+## Fixed in this build
+
+- A half-filled L/R set shows the inline hint, and saving now warns too.
+- Cardio under a minute reads "45s".
+- The hint now says "below AI target".
+- Cardio rows no longer save empty weight and reps fields.
+- Elevate Core and PF360 text is gone from HELP for gym types other than Planet Fitness.
+- SCAN MACHINE, the pickers, the YouTube box and ADD are 44px or taller.
+- Remove is 44px tall.
+
+## Earlier fixes still passing
+
+- Push-Ups with only reps entered saves as "BW × 15".
+- Mountain Climbers reads back as 3min.
+- The copied-row prompt works with OK and Cancel clicked by hand: OK saves the copies and Cancel drops them.
+- The partial-set warning works.
+- On Planet Fitness, Chest defaults to Smith Machine Bench Press and barbell lifts are hidden.
+- A bodyweight of 182.5 shows as "182.5 BW".
 - Treadmill level reads lv3.5 in both LAST and History.
-- Arc Trainer is gone and Ski Erg has been added.
-- Planet Fitness hides barbell lifts, Sumo Deadlift, barbell RDL, Skull Crushers and Close-Grip Bench, and Chest defaults to Smith Machine Bench Press.
-- Commercial Chest has Barbell Bench.
-- Grip strength and arm length are gone.
-- Superset headers are 12px.
+- Ski Erg is in the cardio list.
 
 ## Notes
 
-- Not covered: real AI REC plans, SCAN MACHINE, backup import, and real iOS Safari.
+- Not covered: real AI plans, SCAN MACHINE, backup import, and real iOS Safari.
