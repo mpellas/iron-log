@@ -11,7 +11,7 @@
 //
 // Bump CACHE_VERSION on every deploy so stale app shells get purged.
 
-const CACHE_VERSION = "v2-2026-10-24";
+const CACHE_VERSION = "v3-2026-10-24";
 const CACHE_NAME = `90strong-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -48,16 +48,28 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Navigation requests (user typed URL, tapped PWA icon, etc.): network-first with offline fallback.
+  // CRITICAL: only overwrite the cached ./index.html when the request is actually FOR index.html
+  // (or the scope root "/"). Audit d015a4d #1: previously ANY navigation request — including
+  // ./privacy.html — got written over the ./index.html key, so an offline reload at the app URL
+  // served the Privacy page. The check below pins the cache key to the actual URL fetched, and
+  // only backfills ./index.html when the user is loading the app shell itself.
   if (req.mode === "navigate") {
+    const isAppShell = url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
     event.respondWith(
       fetch(req)
         .then((res) => {
-          // Keep a fresh copy of the shell for next offline load.
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put("./index.html", copy));
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => {
+              // Cache under the actual URL so a later same-URL request hits the right page.
+              c.put(req, copy.clone());
+              // Only replace the app shell when the user is actually loading the shell.
+              if (isAppShell) c.put("./index.html", copy);
+            });
+          }
           return res;
         })
-        .catch(() => caches.match("./index.html"))
+        .catch(() => caches.match(req).then((hit) => hit || caches.match("./index.html")))
     );
     return;
   }

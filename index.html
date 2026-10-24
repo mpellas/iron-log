@@ -17,10 +17,6 @@
   <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-size='15' font-weight='900' text-anchor='middle' fill='%23c6ff5a'%3E90%3C/text%3E%3C/svg%3E"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link rel="manifest" href="manifest.json"/>
-  <meta name="theme-color" content="#0a0a0a"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="90Strong"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap"/>
@@ -186,12 +182,13 @@ function loadProfile(){
       // No profile yet — seed bodyweight from the standalone BW key if the header button was used first.
       return {...DEFAULT_PROFILE,bodyweight:loadBodyweight()||0};
     }
-    // Back-compat: profiles saved before gymType existed now default to "commercial" (the broad
-    // default), not Planet Fitness. The app is public now; most users aren't at PF, and leaking PF
-    // text to a Commercial user is more disruptive than losing the PF default for Mike's own
-    // original profile (which has a real gymType field by now anyway).
+    // Back-compat: profiles saved BEFORE the gymType field existed were all Planet Fitness users
+    // (that was the only supported gym at the time). Keep that as their default on upgrade so an
+    // existing user's PF-specific library doesn't silently change categories under them. Audit
+    // d015a4d #9 flagged the earlier "commercial by default" flip as a regression. Fresh installs
+    // (no stored profile at all) still get Commercial from DEFAULT_PROFILE.
     const merged={...DEFAULT_PROFILE,...stored};
-    if(!stored.gymType)merged.gymType="commercial";
+    if(!stored.gymType)merged.gymType="planet-fitness";
     // Back-compat: profiles saved before bodyweight existed — fall back to the standalone BW key.
     if(stored.bodyweight===undefined)merged.bodyweight=loadBodyweight()||0;
     return merged;
@@ -1003,10 +1000,13 @@ const css=`
   .header-key{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 6px;margin-left:0;line-height:1;min-width:44px;min-height:44px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;}
   .nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:73px;z-index:9;}
   .nav-btn{flex:1;min-width:0;padding:14px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;min-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  /* On ultra-narrow screens (≤300px — e.g. Galaxy Fold cover), drop letter-spacing and shrink the
-     label font so all nav tabs can stay fully readable instead of ellipsing to a single character. */
+  /* On narrow screens, shrink label font before ellipsis kicks in. Two breakpoints:
+     ≤360px — mid-shrink that keeps "HISTORY" readable; ≤300px — Fold-cover rescue. */
+  @media (max-width: 360px){
+    .nav-btn{font-size:11px;letter-spacing:0.5px;padding:14px 2px;}
+  }
   @media (max-width: 300px){
-    .nav-btn{font-size:10px;letter-spacing:0;padding:14px 2px;}
+    .nav-btn{font-size:9px;letter-spacing:0;padding:14px 1px;}
   }
   .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
   .section{padding:20px;}
@@ -1387,14 +1387,17 @@ function SetRow({set,onChange,onRemove,onConfirm,isCardio=false,isBodyweight=fal
     // so the ✓ and ✕ buttons always stay on the same line as the inputs at 390px. The audit's
     // Treadmill-row regression came from grouping both buttons in a shrink:0 sibling that wrapped
     // together — a direct-children flex layout with aggressive input shrinking fixes it.
-    <div className="set-row" style={{flexWrap:"nowrap",gap:3,alignItems:"center",width:"100%"}}>
-      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:0,flex:"1 1 0",padding:"10px 2px"}}/>
+    // Inputs have a minWidth of 44 so they can't shrink below a readable size (audit d015a4d #3).
+    // When the row runs out of space it wraps instead — one row of inputs, buttons flow to row 2.
+    // The nowrap-at-all-costs approach broke under 390px with 25px-wide boxes showing "2.5".
+    <div className="set-row" style={{flexWrap:"wrap",gap:4,alignItems:"center",width:"100%"}}>
+      <input className="set-input" type="number" inputMode="decimal" placeholder="min" value={set.duration||""} onChange={e=>onChange({...set,duration:e.target.value})} style={{minWidth:44,flex:"1 1 56px",padding:"10px 4px"}}/>
       <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22,flexShrink:0}}>MIN</span>
       {!noResistance&&<>
-        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:0,flex:"1 1 0",padding:"10px 2px"}}/>
+        <input className="set-input" type="number" inputMode="numeric" placeholder="lvl" value={set.resistance||""} onChange={e=>onChange({...set,resistance:e.target.value})} style={{minWidth:44,flex:"1 1 48px",padding:"10px 4px"}}/>
         <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22,flexShrink:0}}>LVL</span>
       </>}
-      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:0,flex:"1 1 0",padding:"10px 2px"}}/>
+      <input className="set-input" type="number" inputMode="numeric" placeholder="cal" value={set.calories||""} onChange={e=>onChange({...set,calories:e.target.value})} style={{minWidth:44,flex:"1 1 56px",padding:"10px 4px"}}/>
       <span className="set-label" style={{fontSize:12,lineHeight:1.2,width:"auto",minWidth:22,flexShrink:0}}>CAL</span>
       {checkBtn}
       <button className="btn btn-danger" onClick={onRemove} style={{flexShrink:0}}>✕</button>
@@ -1719,7 +1722,7 @@ function ExerciseCard({exercise,onChange,onRemove,allowSwap=false,history=[],onM
           <button onClick={handleUnavailable} title={unavailable?"Mark as available at my gym":"Mark as unavailable at my gym"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:unavailable?1:0.25,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚫</button>
           <button onClick={handleFlag} title={flagged?"Remove difficulty flag":"Flag as needs work"} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,opacity:flagged?1:0.3,padding:"10px 10px",transition:"opacity 0.15s",minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🚩</button>
           {allowSwap&&<button className="btn-swap" style={{padding:"10px 8px",minWidth:44,flexShrink:0}} title={swapOpen?"Cancel swap":"Swap this exercise"} onClick={()=>setSwapOpen(o=>!o)}>{swapOpen?"✕":"⇄"}</button>}
-          <button className="btn btn-danger" onClick={onRemove} style={{whiteSpace:"nowrap",flexShrink:0,padding:"12px 10px"}} title="Remove">✕</button>
+          <button className="btn btn-danger" onClick={()=>{if(window.confirm(`Remove ${exercise.name} and its logged sets from this workout?`))onRemove();}} style={{whiteSpace:"nowrap",flexShrink:0,padding:"12px 10px",fontSize:16}} title={`Remove ${exercise.name}`}>🗑</button>
         </div>
       </div>
       {swapOpen&&(
@@ -2838,26 +2841,22 @@ function GymTracker(){
     const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
-    // Warn only when there's genuinely dropped-partial content or whole exercises falling out.
-    // Single-side L/R sets DO save (that's the whole point of stripIncompleteSide), so they
-    // don't block — we stash them as a post-save info toast instead. Audit a411361 #2.
-    if(droppedSetNotes.length>0||droppedExerciseNames.length>0){
-      const parts=[];
-      if(droppedExerciseNames.length>0){
-        parts.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data (${droppedExerciseNames.join(", ")})`);
-      }
-      if(droppedSetNotes.length>0){
-        parts.push(`${droppedSetNotes.length} partial ${droppedSetNotes.length===1?"set":"sets"} (${droppedSetNotes.join(", ")})`);
-      }
-      const proceed=window.confirm(`Dropping ${parts.join(" and ")} from this save.\n\nSave the ${afterSetCount} complete ${afterSetCount===1?"set":"sets"} anyway?`);
-      if(!proceed)return;
+    // All "drop" cases are now non-blocking: the save proceeds, and a post-save amber banner at
+    // the top of HISTORY lists what was dropped and what was logged single-side-only. Audit
+    // d015a4d #7: a Cancel on the drop prompt was aborting the entire save, which the user
+    // almost never wants when they've tapped SAVE WORKOUT. Everything the user explicitly
+    // typed is still kept — only empty / partial / unconfirmed rows go.
+    const infoLines=[];
+    if(droppedExerciseNames.length>0){
+      infoLines.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data were skipped: ${droppedExerciseNames.join(", ")}.`);
     }
-    // Non-blocking info for single-side sets: they saved, just one-side only. We hand it off via
-    // a stashed message that the save-complete flash picks up (see postSaveInfoRef below).
-    let postSaveInfo="";
+    if(droppedSetNotes.length>0){
+      infoLines.push(`${droppedSetNotes.length} partial ${droppedSetNotes.length===1?"set":"sets"} dropped: ${droppedSetNotes.join(", ")}.`);
+    }
     if(singleSideNotes.length>0){
-      postSaveInfo=`Saved. ${singleSideNotes.length} set${singleSideNotes.length===1?"":"s"} logged single-side only: ${singleSideNotes.join(", ")}.`;
+      infoLines.push(`${singleSideNotes.length} set${singleSideNotes.length===1?"":"s"} logged single-side only: ${singleSideNotes.join(", ")}.`);
     }
+    const postSaveInfo=infoLines.length?`Saved. ${infoLines.join(" ")}`:"";
     const workoutFocus=activeFocus;
     // Capture timing: use endTime if stopped, else now; use startTime if present. Only include if we have a start.
     let durationSec=null,exerciseTimings=null;
@@ -3371,7 +3370,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
               );
             })()}
             {wasRestoredFromDraft&&exercises.length>0&&!loadedFromAI&&<div style={{fontFamily:"IBM Plex Mono",fontSize:12,letterSpacing:1,color:"var(--muted)",textAlign:"center",padding:"4px 0"}}>⟳ SESSION RESTORED</div>}
-            {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap SWAP if a machine is taken</div>}
+            {loadedFromAI&&exercises.length>0&&<div className="ai-badge">🤖 AI Plan loaded — tap ⇄ to swap if a machine is taken</div>}
             {loadedFromAI&&!manualAdd&&<button className="btn btn-ghost" style={{width:"100%",marginBottom:10,minHeight:44,padding:"12px 14px"}} onClick={()=>setManualAdd(true)}>+ Add an exercise to this plan</button>}
             {(!loadedFromAI||manualAdd)&&(
               <>
@@ -3732,6 +3731,9 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>PLAY</b> — a YouTube video library for workouts you follow along with</div>
             <div className="help-p"><b>LVL3</b> — circuit mode: build sessions by combining exercises across your videos, log as you flow through</div>
 
+            <div className="section-label">Install to Your Home Screen</div>
+            <div className="help-p">90Strong installs as a real app on Android, iOS, and desktop. Works offline, launches instantly, no browser URL bar. <b>Install from the HELP tab</b> — scroll to the top of HELP and tap the big <b>+ INSTALL 90STRONG</b> button, or follow the per-browser steps if the one-tap install isn't offered.</div>
+
             <div className="section-label">Modes</div>
             <div className="help-p">The <b>LVL</b> button in the top header switches between three modes: <b>LVL1</b> (standard AI-driven workouts), <b>LVL2</b> (high-intensity AI-driven workouts), and <b>LVL3</b> (circuit workouts built from your video library, no AI). The nav updates to show what's relevant to the current mode.</div>
 
@@ -3782,7 +3784,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="section-label">The AI Plans</div>
             <div className="help-p">The AI reads your recent history (last 7 sessions) and builds a plan that respects your last weights, your Push/Pull/Legs rotation, and the gym type you picked in your profile. If you hit all reps it adds weight; if you miss once it holds; if you miss two sessions in a row it drops the weight one increment so you can rebuild. If you set your gym to Planet Fitness it substitutes Smith Machines for barbells; home-gym users get dumbbell + bodyweight programming; commercial-gym users get barbell exercises when they fit.</div>
             <div className="help-p">You supply the API key — the app talks directly to Anthropic. A typical plan generation costs pennies. Your key is stored locally and never sent anywhere except Anthropic.</div>
-            <div className="help-p">Once loaded, you can <b>SWAP</b> any exercise (machine taken?), <b>▲▼</b> reorder them, or add more manually with the button at the top of the plan.</div>
+            <div className="help-p">Once loaded, you can tap <b>⇄</b> on any exercise to swap it (machine taken?), tap <b>↑↓</b> to reorder, or add more with the button at the top of the plan.</div>
 
             <div className="section-label">Special Equipment</div>
             <div className="help-p"><b>TRX straps</b> log as bodyweight × reps. Progress by walking your feet forward for a harder angle.</div>
@@ -3802,7 +3804,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>The 🚫 icon</b> marks a machine as unavailable at your gym — the AI stops suggesting it.</div>
             <div className="help-p"><b>The 🚩 icon</b> flags an exercise you want emphasized. The AI weights flagged exercises more heavily in future plans.</div>
             <div className="help-p"><b>The "below last" warning</b> appears if you enter a weight lower than your last session — a safety net against under-lifting by accident.</div>
-            <div className="help-p"><b>SWAP</b> pre-fills the new exercise at <i>your last weight for that exercise</i>, not the weight of what you swapped out of.</div>
+            <div className="help-p">The <b>⇄</b> swap button pre-fills the new exercise at <i>your last weight for that exercise</i>, not the weight of what you swapped out of.</div>
             <div className="help-p"><b>Superset labels</b> (A/B pairs) tell you to do the two exercises back-to-back with no rest between them — active rest comes after B.</div>
 
             <div className="section-label">Your Data</div>
@@ -3820,7 +3822,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>Can I use this at any gym?</b> Yes. Set your gym type in the <b>👤</b> profile (full commercial, Planet Fitness, home gym, or hotel/basic) and the AI tunes its recommendations to the equipment you actually have. Manual logging works for any lift regardless.</div>
             <div className="help-p"><b>Can I add my own exercises?</b> Not directly in the picker today. New exercises get added to your library when the AI names one that isn't built in — you can also add them to a video's exercise list in PLAY, which feeds the LVL3 pool.</div>
             <div className="help-p"><b>Does the AI know if I flag or ban exercises?</b> Yes. Flags increase frequency; bans remove them entirely.</div>
-            <div className="help-p"><b>Can I use this offline?</b> Partly. While the browser tab stays open, LOG and HISTORY continue to work with no network. A cold reload needs internet (the app isn't cached offline). AI generation always needs internet.</div>
+            <div className="help-p"><b>Can I use this offline?</b> Yes. Once you've opened the app online once, the service worker caches it so LOG and HISTORY work offline — including a cold reload. AI generation always needs internet.</div>
             <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
 
             <div className="section-label" style={{marginTop:24}}>Support · Privacy</div>
@@ -3837,7 +3839,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
                 <a href={supportUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",padding:"12px 20px",background:"var(--accent)",color:"#0a0a0a",borderRadius:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,fontWeight:700,textDecoration:"none",minHeight:44,boxSizing:"border-box"}}>☕ BUY ME A COFFEE</a>
               );
             })()}
-            <div className="help-p" style={{marginTop:16}}><a href="privacy.html" style={{color:"var(--accent)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:1,textDecoration:"underline"}}>→ Privacy Policy</a></div>
+            <div style={{marginTop:16}}><a href="privacy.html" style={{display:"inline-block",color:"var(--accent)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:1,textDecoration:"none",border:"1px solid var(--border)",borderRadius:5,padding:"12px 16px",minHeight:44,boxSizing:"border-box"}}>→ Privacy Policy</a></div>
 
             <div style={{fontFamily:"IBM Plex Mono",fontSize:12,color:"var(--muted)",marginTop:24,textAlign:"center",letterSpacing:1}}>90STRONG · built for the honest workout</div>
           </div>
