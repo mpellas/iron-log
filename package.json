@@ -1,0 +1,22 @@
+{
+  "name": "90strong",
+  "version": "2.0.0",
+  "private": true,
+  "description": "90Strong gym tracker — single-file PWA with pre-compiled React bundle.",
+  "homepage": "https://mpellas.github.io/iron-log/",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/regression.js && node tests/smoke.js",
+    "test:regression": "node tests/regression.js",
+    "test:smoke": "node tests/smoke.js",
+    "verify": "node build.js && node tests/regression.js && node tests/smoke.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "jsdom": "^29.1.1"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

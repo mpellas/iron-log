@@ -11,11 +11,14 @@
 //
 // Bump CACHE_VERSION on every deploy so stale app shells get purged.
 
-const CACHE_VERSION = "v3-2026-10-24";
+// CACHE_VERSION is overwritten by build.js on every build so a new deploy busts stale shells
+// in lockstep with the new app.js hash. Leave the "build-" prefix in place as the regex anchor.
+const CACHE_VERSION = "build-391f0d75ef";
 const CACHE_NAME = `90strong-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./app.js",
   "./manifest.json",
   "./privacy.html",
   "./icon-192.png",

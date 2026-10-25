@@ -10,10 +10,18 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-const scriptMatch = html.match(/<script type="text\/babel">\n([\s\S]*?)\n<\/script>/);
-if (!scriptMatch) { console.error("Could not find <script type='text/babel'> in index.html"); process.exit(1); }
-const scriptSrc = scriptMatch[1];
+// Phase-2 build: source lives in src/app.jsx (previously it was inline in index.html's
+// <script type="text/babel"> block). The source still exposes the same module-scope helpers.
+let scriptSrc;
+try {
+  scriptSrc = fs.readFileSync(path.join(__dirname, "..", "src", "app.jsx"), "utf8");
+  // Drop the ES-module import lines at the top — the test harness provides React stubs via
+  // its own prelude, and `import` is a syntax error inside a vm Script.
+  scriptSrc = scriptSrc.replace(/^import[^;]+;$/gm, "");
+} catch (e) {
+  console.error("Could not read src/app.jsx — expected after Phase-2 pre-compile ship.");
+  process.exit(1);
+}
 
 // We only need the module-scope declarations: the Set constants and the pure helper functions
 // defined just below them (hasAnyData, parseCardioAiTarget). React components reference `React` and

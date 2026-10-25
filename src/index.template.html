@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="theme-color" content="#0a0a0a"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="90Strong"/>
+  <title>90Strong</title>
+  <!-- Content-Security-Policy: with the Phase-2 pre-compile, React + ReactDOM + app code are
+       bundled into same-origin ./app.js. 'unsafe-eval' is no longer needed (no in-browser Babel).
+       'unsafe-inline' is still needed for the small inline bootstrap script at end-of-body and
+       for a few style attributes React still ships. CDN script-src is empty. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://img.youtube.com https://i.ytimg.com; media-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' https://api.anthropic.com; manifest-src 'self'; worker-src 'self';"/>
+  <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Ctext x='16' y='22' font-family='Arial Black,sans-serif' font-size='15' font-weight='900' text-anchor='middle' fill='%23c6ff5a'%3E90%3C/text%3E%3C/svg%3E"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap"/>
+  <style>
+    html,body,#root{height:100%;margin:0;padding:0;background:#0a0a0a;}
+    *{-webkit-tap-highlight-color:transparent;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="app.js?v=__BUILD_HASH__"></script>
+<script>
+  // Service worker registration — enables offline use and the Chrome / Android install prompt.
+  // Scoped to /iron-log/ to match the GitHub Pages path. Failure is non-fatal.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => { /* ignore */ });
+    });
+  }
+
+  // Capture the install prompt so we can show it in the HELP tab's install button.
+  window.__ninetyStrongInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    window.__ninetyStrongInstallPrompt = e;
+    window.dispatchEvent(new CustomEvent("ninetystrong:installable"));
+  });
+  window.addEventListener("appinstalled", () => {
+    window.__ninetyStrongInstallPrompt = null;
+    window.dispatchEvent(new CustomEvent("ninetystrong:installed"));
+  });
+</script>
+</body>
+</html>
