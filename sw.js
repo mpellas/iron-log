@@ -13,7 +13,7 @@
 
 // CACHE_VERSION is overwritten by build.js on every build so a new deploy busts stale shells
 // in lockstep with the new app.js hash. Leave the "build-" prefix in place as the regex anchor.
-const CACHE_VERSION = "build-391f0d75ef";
+const CACHE_VERSION = "build-88879c4567";
 const CACHE_NAME = `90strong-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",

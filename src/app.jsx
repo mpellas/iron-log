@@ -225,6 +225,12 @@ function extractKeyFromHash(){
   }catch(e){return null;}
 }
 function saveApiKey(k){localStorage.setItem("ironlog:apikey",k);}
+// AI data-sharing consent (Apple App Review 5.1.2(i) + Google Play Data Safety).
+// Must be given explicitly before the FIRST request that sends workout/profile data to Anthropic.
+// Stored as an ISO timestamp so we can show "accepted on X" and let the user revoke.
+function loadAiConsent(){try{return localStorage.getItem("ironlog:ai-consent-at")||"";}catch{return"";}}
+function saveAiConsent(ts){try{localStorage.setItem("ironlog:ai-consent-at",ts||new Date().toISOString());}catch(e){}}
+function clearAiConsent(){try{localStorage.removeItem("ironlog:ai-consent-at");}catch(e){}}
 function loadDynamicLibrary(){try{return JSON.parse(localStorage.getItem("ironlog:library")||"{}");}catch{return{};}
 }
 function saveDynamicLibrary(lib){try{localStorage.setItem("ironlog:library",JSON.stringify(lib));_mergedLibraryCache=null;}catch(e){}}
@@ -1297,6 +1303,41 @@ function ApiKeyModal({onSave,hasKey,onRemove,onClose,onSkip}){
           </div>
         )}
         <div className="key-note">STORED LOCALLY · NEVER DISPLAYED · NEVER SENT ANYWHERE EXCEPT ANTHROPIC</div>
+      </div>
+    </div>
+  );
+}
+
+// Explicit, affirmative consent before the first time workout/profile data leaves the device.
+// Required by Apple App Review guideline 5.1.2(i) for AI processing of user data and listed under
+// Google Play Data Safety. Rendered when the user taps AI REC's generate or SCAN MACHINE and
+// no prior consent timestamp exists. "Accept" writes the timestamp and continues the pending
+// action via onAccept(); "Cancel" dismisses without sending anything.
+function AIConsentModal({onAccept,onCancel,trigger}){
+  const triggerLabel=trigger==="scan"?"Scan Machine":"AI Rec";
+  return(
+    <div className="key-modal-overlay">
+      <div className="key-modal" style={{maxWidth:460,maxHeight:"90vh",overflowY:"auto"}}>
+        <div className="key-modal-title">AI DATA SHARING</div>
+        <div className="key-modal-desc" style={{marginBottom:12}}>
+          You tapped <b style={{color:"var(--accent)"}}>{triggerLabel}</b>. To build this, 90Strong needs to send some of your data to <b>Anthropic</b> (the Claude API). Nothing has been sent yet.
+        </div>
+        <div className="key-modal-desc" style={{marginBottom:8,color:"var(--text)"}}><b>What gets sent on each AI Rec tap:</b></div>
+        <ul style={{margin:"0 0 14px 20px",fontSize:13,color:"var(--muted)",lineHeight:1.6}}>
+          <li>A summary of your last ~7 sessions (exercises, max weight, reps, dates).</li>
+          <li>Profile fields: gym type, dumbbell max, bodyweight if set, dominant side, incline preference, time budget, notes.</li>
+          <li>Exercises you've flagged as unavailable or difficult.</li>
+          <li>Your API key, in the request header.</li>
+        </ul>
+        <div className="key-modal-desc" style={{marginBottom:8,color:"var(--text)"}}><b>What gets sent on each Scan Machine tap:</b></div>
+        <ul style={{margin:"0 0 14px 20px",fontSize:13,color:"var(--muted)",lineHeight:1.6}}>
+          <li>The photo you take, sent once to identify the equipment.</li>
+        </ul>
+        <div className="key-modal-desc" style={{marginBottom:16,fontSize:12,color:"var(--muted)"}}>
+          Nothing is stored by Anthropic beyond the single request. See the full <a href="./privacy.html" target="_blank">Privacy Policy</a>. You can revoke this consent any time from the HELP tab.
+        </div>
+        <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={onAccept}>ACCEPT & CONTINUE</button>
+        <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={onCancel}>CANCEL — DON'T SEND</button>
       </div>
     </div>
   );
@@ -2393,6 +2434,11 @@ function GymTracker(){
   const [pendingHashKey,setPendingHashKey]=useState(()=>extractKeyFromHash());
   const [apiKey,setApiKey]=useState(()=>loadApiKey());
   const [showKeyModal,setShowKeyModal]=useState(false);
+  // AI data-sharing consent (Apple 5.1.2(i)). Timestamp (ISO) when the user accepted, or "" if not yet.
+  // When a user taps AI REC or SCAN MACHINE without consent, we open AIConsentModal and stash the
+  // intended action in pendingAiAction so we can resume it after Accept.
+  const [aiConsentAt,setAiConsentAt]=useState(()=>loadAiConsent());
+  const [pendingAiAction,setPendingAiAction]=useState(null); // {type:"rec"|"scan", payload}
   const [keySkipped,setKeySkipped]=useState(()=>loadKeySkipped());
   const acceptPendingHashKey=()=>{if(pendingHashKey){saveApiKey(pendingHashKey);setApiKey(pendingHashKey);saveKeySkipped(false);setKeySkipped(false);setPendingHashKey(null);}};
   const rejectPendingHashKey=()=>{setPendingHashKey(null);};
@@ -2642,6 +2688,26 @@ function GymTracker(){
   const handleRemoveKey=()=>{saveApiKey("");setApiKey("");setShowKeyModal(false);};
   const handleCloseKeyModal=()=>{setShowKeyModal(false);};
   const handleSkipKey=()=>{saveKeySkipped(true);setKeySkipped(true);setShowKeyModal(false);setTab("log");};
+  // AI consent handlers. Accept stamps the timestamp AND resumes the pending action in the same
+  // tick by passing the fresh timestamp straight through — don't read state inside the resumer,
+  // because setAiConsentAt won't have flushed yet. Cancel just closes.
+  const handleAcceptAiConsent=()=>{
+    const ts=new Date().toISOString();
+    saveAiConsent(ts);
+    setAiConsentAt(ts);
+    const act=pendingAiAction;
+    setPendingAiAction(null);
+    // Resume the gated action with consent now in hand. Both call sites also re-check
+    // apiKey, so missing key still falls through to the API key modal.
+    if(!act)return;
+    if(act.type==="rec"){getAiRecommendation(act.avoidList||[],act.focusOverrideArg||null,true);}
+    else if(act.type==="scan"){processPhotoScan(act.file,true);}
+  };
+  const handleCancelAiConsent=()=>{setPendingAiAction(null);};
+  const handleRevokeAiConsent=()=>{
+    if(!window.confirm("Revoke AI data-sharing consent? AI REC and SCAN MACHINE will ask again on next use."))return;
+    clearAiConsent();setAiConsentAt("");
+  };
   const apiHeaders=()=>({"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
   const addExercise=()=>{
@@ -2922,10 +2988,17 @@ function GymTracker(){
     setExercises(loaded);setLoadedFromAI(true);setManualAdd(false);setTab("log");
   };
 
-  const handlePhotoScan=async(e)=>{
+  const handlePhotoScan=(e)=>{
     const file=e.target.files?.[0];
     if(!file)return;
     e.target.value="";
+    if(!apiKey){setShowKeyModal(true);return;}
+    // Gate: require AI data-sharing consent before sending the photo (Apple 5.1.2(i)).
+    if(!loadAiConsent()){setPendingAiAction({type:"scan",file});return;}
+    processPhotoScan(file,true);
+  };
+  const processPhotoScan=async(file,_consented)=>{
+    if(!file)return;
     if(!apiKey){setShowKeyModal(true);return;}
     setScanLoading(true);setScanResult(null);
     try{
@@ -2946,8 +3019,11 @@ function GymTracker(){
     setScanLoading(false);
   };
 
-  const getAiRecommendation=async(avoidList=[],focusOverrideArg=null)=>{
+  const getAiRecommendation=async(avoidList=[],focusOverrideArg=null,_consented=false)=>{
     if(!apiKey){setShowKeyModal(true);return;}
+    // Gate: require AI data-sharing consent before sending profile/history (Apple 5.1.2(i)).
+    // _consented is set by the resumer after Accept so we don't bounce between modals.
+    if(!_consented&&!loadAiConsent()){setPendingAiAction({type:"rec",avoidList,focusOverrideArg});return;}
     setAiLoading(true);setAiPlan(null);setAiError(null);setAllRefusedExercises([]);setTab("ai");
     try{
     const unavailableExercises=loadUnavailableExercises();
@@ -3235,6 +3311,7 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
         </div>
       )}
       {!pendingHashKey&&((!apiKey&&!keySkipped)||showKeyModal)&&<ApiKeyModal onSave={handleSaveKey} hasKey={!!apiKey} onRemove={handleRemoveKey} onClose={handleCloseKeyModal} onSkip={handleSkipKey}/>}
+      {pendingAiAction&&<AIConsentModal trigger={pendingAiAction.type} onAccept={handleAcceptAiConsent} onCancel={handleCancelAiConsent}/>}
       {showProfileModal&&<ProfileModal profile={profile} onSave={handleSaveProfile} onClose={()=>setShowProfileModal(false)} onReset={handleResetProfile}/>}
       {showCardioModal&&<CardioEquipmentModal selected={cardioEquipment} onSave={list=>{setCardioEquipment(list);}} onClose={()=>setShowCardioModal(false)} gymType={profile.gymType}/>}
       {showDataModal&&<DataModal onClose={()=>setShowDataModal(false)} onImportDone={()=>{setHistory(loadHistory());setShowDataModal(false);}}/>}
@@ -3789,6 +3866,16 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
             <div className="help-p"><b>Does the AI know if I flag or ban exercises?</b> Yes. Flags increase frequency; bans remove them entirely.</div>
             <div className="help-p"><b>Can I use this offline?</b> Yes. Once you've opened the app online once, the service worker caches it so LOG and HISTORY work offline — including a cold reload. AI generation always needs internet.</div>
             <div className="help-p"><b>Is my data private?</b> Yes. It never leaves your device except the summary sent to Anthropic when you generate an AI plan.</div>
+
+            <div className="section-label" style={{marginTop:24}}>AI Data Sharing</div>
+            {aiConsentAt?(
+              <>
+                <div className="help-p">You accepted AI data-sharing on <b>{(()=>{try{return new Date(aiConsentAt).toLocaleDateString();}catch{return aiConsentAt;}})()}</b>. Workout history and profile are sent to Anthropic each time you tap AI REC or SCAN MACHINE.</div>
+                <button onClick={handleRevokeAiConsent} style={{padding:"12px 16px",background:"none",border:"1px solid var(--danger)",borderRadius:6,color:"var(--danger)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer",minHeight:44}}>REVOKE AI CONSENT</button>
+              </>
+            ):(
+              <div className="help-p" style={{fontStyle:"italic",color:"var(--muted)"}}>Not yet given. You'll be asked the first time you tap AI REC or SCAN MACHINE.</div>
+            )}
 
             <div className="section-label" style={{marginTop:24}}>Support · Privacy</div>
             <div className="help-p">90Strong is free, has no ads, and keeps your data on your device. If it helps you train, you can toss a tip into the jar.</div>

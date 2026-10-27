@@ -25,6 +25,10 @@
     .back{display:inline-block;margin-top:32px;padding:12px 16px;border:1px solid var(--border);border-radius:5px;color:var(--text);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;min-height:44px;}
     .back:hover{border-color:var(--accent);color:var(--accent);}
     .updated{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+    .tag{display:inline-block;padding:2px 8px;border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;margin-right:6px;vertical-align:middle;}
+    .tag-web{background:#1a2a1a;color:#8fc87f;border:1px solid #3f6f3f;}
+    .tag-store{background:#1a1a2a;color:#8f9fcc;border:1px solid #3f4f7f;}
+    .callout{background:var(--surface);border-left:3px solid var(--accent);padding:12px 16px;margin:12px 0;border-radius:0 5px 5px 0;}
   </style>
 </head>
 <body>
@@ -32,41 +36,79 @@
   <h1>Privacy Policy</h1>
   <div class="sub">90Strong · Workout Tracker</div>
 
-  <p>90Strong is a personal workout tracker. It runs entirely in your browser. There is no account, no cloud, and no analytics tracking you across the web. This policy describes exactly what the app does with information, so you can decide if you're comfortable using it.</p>
+  <p>90Strong is a workout tracker. This policy describes what the app does with information. It covers two editions:</p>
+  <p><span class="tag tag-web">WEB</span>The browser version at <code>mpellas.github.io/iron-log</code>. No ads, no analytics, no cookies.</p>
+  <p><span class="tag tag-store">STORE</span>Future native builds published to Google Play and the Apple App Store. These editions include banner ads (Google AdMob) and the required consent flows. Store builds are not available yet; this policy covers them in advance.</p>
 
   <h2>What stays on your device</h2>
-  <p>Everything you log — exercises, sets, weights, reps, notes, YouTube video entries, and your profile fields (gym type, dumbbell max, bodyweight, etc.) — is stored only in your browser's local storage, on the device you logged it from. We do not have a copy. If you clear your browser's site data, uninstall the home-screen app, or switch devices without exporting a backup, that data is lost.</p>
+  <p>Everything you log — exercises, sets, weights, reps, notes, YouTube video entries, and your profile fields (gym type, dumbbell max, bodyweight, dominant side, incline preference, session time budget, free-form notes) — is stored only in your browser's local storage, on the device you logged it from. We do not have a copy. If you clear your browser's site data, uninstall the home-screen app, or switch devices without exporting a backup, that data is lost.</p>
 
-  <h2>What leaves your device</h2>
-  <p>90Strong sends information outside your device only in these cases, each triggered by your own action:</p>
+  <h2>Data we send off-device</h2>
+
+  <h2>1. Anthropic (Claude API) — when you tap AI REC or SCAN MACHINE</h2>
+  <p><span class="tag tag-web">WEB</span><span class="tag tag-store">STORE</span></p>
+  <p>We send workout data to <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic</a> only when you explicitly tap <strong>AI REC</strong> (generate a plan) or <strong>SCAN MACHINE</strong> (identify a photo). On the first such tap, we show a consent screen; nothing goes until you accept. You can revoke consent any time from the HELP tab's "AI Data Sharing" section.</p>
+  <p>Each AI REC request includes:</p>
   <ul>
-    <li><strong>AI plan generation.</strong> When you tap AI REC and your API key is set, the app sends your recent workout summary and the exercise library to <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic's API</a> so Claude can draft the plan. Your API key is included in that request. Anthropic's privacy terms apply to that traffic.</li>
-    <li><strong>Machine photo scan.</strong> If you use the camera scan feature, the photo is sent in the same request to Anthropic for identification, then discarded. The photo is not stored anywhere beyond that single request.</li>
-    <li><strong>YouTube playback.</strong> Any YouTube video you link or play is loaded directly from YouTube's embed service. YouTube's privacy terms apply to that playback. The app does not route the request through its own servers.</li>
-    <li><strong>Static assets.</strong> The page itself, its fonts, and the React / Babel libraries load from GitHub Pages, Google Fonts, and unpkg.com. Those services may log your IP address as part of standard web serving.</li>
+    <li>A summary of your last ~7 sessions: exercise names, max weights, rep counts, dates.</li>
+    <li>Your profile fields (gym type, dumbbell max, bodyweight if set, dominant side, incline preference, time budget, free-form notes).</li>
+    <li>The names of exercises you've flagged as unavailable or difficult.</li>
+    <li>Your API key, in the request header.</li>
   </ul>
+  <p>Each SCAN MACHINE request includes the photo you take, sent once and discarded on Anthropic's side after the response. Photos are not stored anywhere beyond that single request.</p>
+  <p>Anthropic's privacy terms apply to the processing on their side.</p>
+
+  <h2>2. Google AdMob — ads in store builds <span class="tag tag-store">STORE</span></h2>
+  <p>The <strong>WEB edition has no ads and uses no ad SDK</strong>. Store builds include <a href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener">Google AdMob</a> for banner ads. The AdMob SDK collects, at minimum:</p>
+  <ul>
+    <li>An advertising identifier (Android Advertising ID or iOS IDFA, with your OS-level permission).</li>
+    <li>Device model, operating-system version, screen size, and locale.</li>
+    <li>Coarse location derived from your IP address.</li>
+    <li>Ad interaction events (which ad was shown, whether you tapped it).</li>
+  </ul>
+  <p>On first launch of a store build, we show either Apple's App Tracking Transparency prompt (iOS) or Google's User Messaging Platform consent form (Android), as required by region. You can choose personalized or non-personalized ads, and you can change your choice later in your device settings or from the HELP tab.</p>
+  <p>Google's privacy policy applies to the data processed by the AdMob SDK: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a>.</p>
+
+  <h2>3. YouTube embeds — only if you link a video</h2>
+  <p><span class="tag tag-web">WEB</span><span class="tag tag-store">STORE</span></p>
+  <p>If you add a YouTube URL to the PLAY tab and tap a video card, the video loads directly from YouTube's embed service. YouTube's privacy terms apply to that playback. We do not route the request through our own servers and we do not get any data from YouTube about your viewing.</p>
+
+  <h2>4. Static assets</h2>
+  <p><span class="tag tag-web">WEB</span></p>
+  <p>In the web edition, the app loads Google Fonts and the service worker from GitHub Pages. Those services may log your IP address as part of standard web serving. The store editions bundle these assets locally and do not call out for them.</p>
 
   <h2>Your API key</h2>
-  <p>Your Anthropic API key is stored in plain text in your browser's local storage. It is used only in direct requests from your browser to Anthropic. It is not sent to any other server, not displayed anywhere in the UI after you save it, and not included in the backup export unless you choose to include it when sharing. You can clear it any time via the <code>⚙</code> icon.</p>
+  <p>Your Anthropic API key is stored in plain text in your browser's local storage. It is used only in direct requests from your browser to Anthropic. It is not sent to any other server, not displayed anywhere in the UI after you save it, and not included in the backup export. You can clear it any time via the <code>⚙</code> icon.</p>
 
-  <h2>Cookies and tracking</h2>
-  <p>90Strong sets no cookies, uses no analytics (Google, Mixpanel, Posthog, etc.), and does not fingerprint your browser. There is no advertising. The only persistent storage the app uses is your browser's local storage for your workout data and settings.</p>
+  <h2>Cookies and analytics</h2>
+  <p>90Strong sets no cookies. The <strong>WEB edition uses no analytics</strong> (no Google Analytics, no Mixpanel, no Posthog, no fingerprinting). The <strong>store editions include no analytics beyond the Google AdMob metrics listed above</strong> — we don't add our own tracking on top.</p>
 
   <h2>Backups and sharing</h2>
-  <p>The <code>💾</code> button exports your full workout history and settings as a JSON file to your device. You choose where that file goes. The app does not upload backups anywhere.</p>
+  <p>The <code>💾</code> button exports your full workout history and settings as a JSON file to your device. You choose where that file goes. The export does <strong>not</strong> include your API key. The app does not upload backups anywhere.</p>
 
-  <h2>Minors</h2>
-  <p>90Strong is not directed at children under 13 and does not knowingly collect any information from them.</p>
+  <h2>Children</h2>
+  <p>90Strong is not directed at children under 13 and does not knowingly collect any information from them. Store builds will be age-rated to reflect this.</p>
+
+  <h2>Your rights</h2>
+  <p>You can at any time:</p>
+  <ul>
+    <li>Export your data (<code>💾</code> button).</li>
+    <li>Delete your API key (<code>⚙</code> icon).</li>
+    <li>Revoke AI data-sharing consent (HELP tab → "AI Data Sharing").</li>
+    <li>Change your ad personalization choice (device Settings → Privacy → Advertising, or OS-level ATT/UMP controls).</li>
+    <li>Delete the app, which deletes all local data on that device.</li>
+  </ul>
+  <p>Under GDPR (EU), CCPA (California), and similar laws, you have the right to access, correct, delete, or receive a copy of personal data about you. Because 90Strong's app code does not transmit personal data to any server we control, those requests are satisfied by the export + delete options above. For data collected by Anthropic or Google AdMob, exercise those rights through their own services.</p>
 
   <h2>Changes to this policy</h2>
-  <p>If this policy changes, the updated date at the bottom will change too. The source history of this page is public at <a href="https://github.com/mpellas/iron-log" target="_blank" rel="noopener">github.com/mpellas/iron-log</a>.</p>
+  <p>If this policy changes, the updated date at the bottom changes too. The source history of this page is public at <a href="https://github.com/mpellas/iron-log" target="_blank" rel="noopener">github.com/mpellas/iron-log</a>.</p>
 
   <h2>Contact</h2>
   <p>Open an issue at <a href="https://github.com/mpellas/iron-log/issues" target="_blank" rel="noopener">github.com/mpellas/iron-log/issues</a>.</p>
 
   <a href="./" class="back">← Back to the app</a>
 
-  <div class="updated">Last updated: October 24, 2026</div>
+  <div class="updated">Last updated: October 26, 2026</div>
 </div>
 </body>
 </html>
