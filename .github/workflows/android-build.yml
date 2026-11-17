@@ -1,0 +1,148 @@
+# Build a signed 90Strong Android App Bundle (.aab) on tag push and attach it to a GitHub Release.
+#
+# Trigger: push a tag matching v*.*.* (e.g. `git tag v1.0.0 && git push --tags`).
+# Also runnable manually from the Actions tab via workflow_dispatch.
+#
+# Prerequisites (set once):
+#   Repo Secrets:
+#     KEYSTORE_BASE64    base64 of the upload keystore
+#     KEYSTORE_PASSWORD  storePassword
+#     KEY_PASSWORD       keyPassword
+#     KEY_ALIAS          keyAlias
+#   (The one-shot keystore-gen.yml workflow mints these; see its header.)
+#
+# What it produces:
+#   - Signed AAB at android/app/build/outputs/bundle/release/app-release.aab
+#   - GitHub Release named after the tag, with the AAB attached
+#   - The same AAB uploaded as a workflow artifact (14-day retention) so you can grab
+#     it from the Actions tab if the release step fails.
+
+name: Android build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'versionName to stamp into the AAB (e.g. 1.0.0). Optional — defaults to the tag or 0.0.0-dev.'
+        required: false
+
+permissions:
+  contents: write  # needed for softprops/action-gh-release to create the Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build web bundle (esbuild) + mirror to www/
+        run: npm run build
+
+      - name: Verify (regression + jsdom smoke)
+        # Run the same guards as `npm run verify` but without re-running build.
+        run: |
+          node tests/regression.js
+          node tests/smoke.js
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Compute versionName / versionCode
+        id: ver
+        run: |
+          # versionName: prefer the dispatch input, then the git tag (v1.2.3 -> 1.2.3), then dev.
+          if [ -n "${{ inputs.version_name }}" ]; then
+            VNAME="${{ inputs.version_name }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VNAME="${GITHUB_REF#refs/tags/v}"
+          else
+            VNAME="0.0.0-dev"
+          fi
+          # versionCode: monotonically increasing integer required by Play. Use the run number.
+          VCODE="${GITHUB_RUN_NUMBER}"
+          echo "versionName=$VNAME" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$VCODE" >> "$GITHUB_OUTPUT"
+          echo "Using versionName=$VNAME versionCode=$VCODE"
+
+      - name: Stamp versionName / versionCode into build.gradle
+        run: |
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ steps.ver.outputs.versionCode }}/" android/app/build.gradle
+          sed -i -E "s/versionName \"[^\"]+\"/versionName \"${{ steps.ver.outputs.versionName }}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - name: Decode keystore and write keystore.properties
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is empty. Run keystore-gen.yml first."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/upload.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=upload.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Gradle bundleRelease (produces .aab)
+        working-directory: android
+        run: ./gradlew :app:bundleRelease --no-daemon --stacktrace
+
+      - name: Rename AAB with version tag
+        id: aab
+        run: |
+          SRC="android/app/build/outputs/bundle/release/app-release.aab"
+          DEST="90strong-v${{ steps.ver.outputs.versionName }}-code${{ steps.ver.outputs.versionCode }}.aab"
+          cp "$SRC" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          ls -lh "$DEST"
+
+      - name: Upload AAB as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aab-${{ steps.ver.outputs.versionName }}-code${{ steps.ver.outputs.versionCode }}
+          path: ${{ steps.aab.outputs.path }}
+          retention-days: 14
+
+      - name: Create GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.aab.outputs.path }}
+          body: |
+            Android App Bundle for 90Strong ${{ steps.ver.outputs.versionName }}.
+            Build run: #${{ github.run_number }} · versionCode ${{ steps.ver.outputs.versionCode }}
+            Upload the attached `.aab` to the Google Play Console closed/production track.
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          rm -f android/upload.jks android/keystore.properties

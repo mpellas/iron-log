@@ -1,2 +1,24 @@
 node_modules/
 .DS_Store
+
+# Capacitor-generated at build time (contents are derived from web assets + gradle sync).
+www/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/capacitor-cordova-android-plugins/
+
+# Android/Gradle build outputs and local tooling state.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+
+# Signing material — the keystore itself is stored as a GitHub secret.
+*.jks
+*.keystore
+keystore.properties

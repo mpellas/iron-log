@@ -104,6 +104,32 @@ async function build() {
   fs.writeFileSync(path.join(ROOT, "sw.js"), sw);
   console.log(`✓ sw.js CACHE_VERSION bumped to build-${bundleHash}`);
 
+  // 4. Mirror the web assets into ./www/ for Capacitor (native Android build).
+  // Capacitor's webDir is "www" (see capacitor.config.ts). GitHub Pages keeps serving
+  // the same files from the repo root — ./www/ is strictly an extra output location
+  // for `npx cap sync android` to pick up.
+  const WWW = path.join(ROOT, "www");
+  if (!fs.existsSync(WWW)) fs.mkdirSync(WWW, { recursive: true });
+  const WEB_ASSETS = [
+    "index.html",
+    "app.js",
+    "sw.js",
+    "manifest.json",
+    "privacy.html",
+    "icon-192.png",
+    "icon-512.png",
+    "icon-maskable-512.png",
+  ];
+  for (const name of WEB_ASSETS) {
+    const from = path.join(ROOT, name);
+    if (!fs.existsSync(from)) {
+      console.error(`✗ missing ${name} — can't mirror to www/`);
+      process.exit(1);
+    }
+    fs.copyFileSync(from, path.join(WWW, name));
+  }
+  console.log(`✓ www/ mirrored (${WEB_ASSETS.length} files)`);
+
   console.log("Build complete.");
 }
 
