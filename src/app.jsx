@@ -108,10 +108,12 @@ function importData(file,onDone){
       if(data.videoLogs&&typeof data.videoLogs==="object")localStorage.setItem("ironlog:video-logs",JSON.stringify(data.videoLogs));
       if(Array.isArray(data.lvl3Sessions))localStorage.setItem("ironlog:lvl3-sessions",JSON.stringify(data.lvl3Sessions));
       if(data.profile&&typeof data.profile==="object"){
-        // Imported profiles that lack gymType default to "commercial" (safe/broad) rather than "planet-fitness".
-        // Only the user's own in-browser upgrade preserves PF (that path is in loadProfile).
+        // Imported profiles that lack gymType are treated the same way loadProfile treats a
+        // legacy stored profile: no gymType key = pre-gymType-era export = Planet Fitness.
+        // Audit 5d5f0f8 Medium #3: the old "commercial" default here didn't match loadProfile's
+        // PF default, so a user re-importing their own backup would see their gym type change.
         const merged={...DEFAULT_PROFILE,...data.profile};
-        if(!data.profile.gymType)merged.gymType="commercial";
+        if(!data.profile.gymType)merged.gymType="planet-fitness";
         // Preserve the current bodyweight if the imported profile doesn't have one — stops an older
         // backup from silently wiping a value the user set after that backup was taken.
         if(data.profile.bodyweight===undefined||data.profile.bodyweight===null||Number(data.profile.bodyweight)<=0){
@@ -1334,7 +1336,7 @@ function AIConsentModal({onAccept,onCancel,trigger}){
           <li>The photo you take, sent once to identify the equipment.</li>
         </ul>
         <div className="key-modal-desc" style={{marginBottom:16,fontSize:12,color:"var(--muted)"}}>
-          Nothing is stored by Anthropic beyond the single request. See the full <a href="./privacy.html" target="_blank">Privacy Policy</a>. You can revoke this consent any time from the HELP tab.
+          Anthropic processes each request to generate the response. Per their API terms, inputs and outputs may be retained for up to 30 days by default for abuse monitoring. See the full <a href="./privacy.html" target="_blank">Privacy Policy</a>. You can revoke this consent any time from the HELP tab.
         </div>
         <button className="btn btn-accent" style={{width:"100%",padding:14}} onClick={onAccept}>ACCEPT & CONTINUE</button>
         <button style={{width:"100%",padding:12,marginTop:8,background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--muted)",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,letterSpacing:2,cursor:"pointer"}} onClick={onCancel}>CANCEL — DON'T SEND</button>
@@ -2872,11 +2874,16 @@ function GymTracker(){
     const cleanedExercises=withCleanedSets.filter(ex=>ex.sets.length>0);
     const afterSetCount=cleanedExercises.reduce((s,ex)=>s+ex.sets.length,0);
     if(!cleanedExercises.length){window.alert("No complete sets to save. Each set needs weight × reps (or reps for bodyweight, duration for timed, etc.).");return;}
-    // All "drop" cases are now non-blocking: the save proceeds, and a post-save amber banner at
-    // the top of HISTORY lists what was dropped and what was logged single-side-only. Audit
-    // d015a4d #7: a Cancel on the drop prompt was aborting the entire save, which the user
-    // almost never wants when they've tapped SAVE WORKOUT. Everything the user explicitly
-    // typed is still kept — only empty / partial / unconfirmed rows go.
+    // Drop behavior: audit 5d5f0f8 Medium #2 wanted a confirm back, but audit d015a4d #7 said
+    // Cancel was blocking saves the user wanted. Compromise: silent drop for EMPTY exercises
+    // (nothing lost — just a never-touched row) + post-save banner. For PARTIAL sets (user
+    // typed real numbers into one field but not all) we prompt, because that's actual data
+    // about to be discarded. Confirm = OK; abort = Cancel.
+    if(droppedSetNotes.length>0){
+      const list=droppedSetNotes.slice(0,5).join(", ")+(droppedSetNotes.length>5?`, and ${droppedSetNotes.length-5} more`:"");
+      const ok=window.confirm(`${droppedSetNotes.length} partial set${droppedSetNotes.length===1?"":"s"} will be dropped (${list}).\n\nTap OK to save without them, or Cancel to go back and fix.`);
+      if(!ok)return;
+    }
     const infoLines=[];
     if(droppedExerciseNames.length>0){
       infoLines.push(`${droppedExerciseNames.length} ${droppedExerciseNames.length===1?"exercise":"exercises"} with no data were skipped: ${droppedExerciseNames.join(", ")}.`);
@@ -3337,8 +3344,11 @@ NOTE: build exactly ${pairCount} superset pairs in the "supersets" array (one ob
         <div className="nav">
           {(()=>{
             const isL3=intensityLevel===3;
-            const tabs=[["about","ABOUT"],["help","HELP"],["log","LOG"],["history","HISTORY"],["progress","GAINS"]];
-            if(!isL3)tabs.push(["ai","AI REC"]);
+            // Tab labels are tight at 7 entries on a 360-390px phone — HISTORY and AI REC
+            // used to ellipsize. HIST + AI are both common gym-app abbreviations and the
+            // generate button inside the AI tab still says "AI REC".
+            const tabs=[["about","ABOUT"],["help","HELP"],["log","LOG"],["history","HIST"],["progress","GAINS"]];
+            if(!isL3)tabs.push(["ai","AI"]);
             tabs.push(["play","PLAY"]);
             if(isL3)tabs.push(["lvl3","LVL3"]);
             return tabs.map(([id,label])=>(

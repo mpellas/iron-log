@@ -13,7 +13,7 @@
 
 // CACHE_VERSION is overwritten by build.js on every build so a new deploy busts stale shells
 // in lockstep with the new app.js hash. Leave the "build-" prefix in place as the regex anchor.
-const CACHE_VERSION = "build-88879c4567";
+const CACHE_VERSION = "build-2d1aa1cdf0";
 const CACHE_NAME = `90strong-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -78,6 +78,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Same-origin assets: cache-first, with a background fetch to refresh.
+  // Audit 5d5f0f8 Medium #1: index.html loads app.js?v=<build-hash>, but APP_SHELL caches
+  // the BARE path ./app.js. On a first visit the page renders from network, and the SW only
+  // learns the hashed URL after that fetch. If the user goes offline before any refresh
+  // ever hits the SW, the exact-URL cache lookup would miss and the page stayed blank. The
+  // bare-path fallback in the offline branch below covers that window.
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req).then((res) => {
@@ -86,7 +91,14 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then((c) => c.put(req, copy));
         }
         return res;
-      }).catch(() => cached);
+      }).catch(async () => {
+        if (cached) return cached;
+        if (url.search) {
+          const bare = await caches.match(url.origin + url.pathname);
+          if (bare) return bare;
+        }
+        return undefined;
+      });
       return cached || network;
     })
   );

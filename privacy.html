@@ -55,8 +55,8 @@
     <li>The names of exercises you've flagged as unavailable or difficult.</li>
     <li>Your API key, in the request header.</li>
   </ul>
-  <p>Each SCAN MACHINE request includes the photo you take, sent once and discarded on Anthropic's side after the response. Photos are not stored anywhere beyond that single request.</p>
-  <p>Anthropic's privacy terms apply to the processing on their side.</p>
+  <p>Each SCAN MACHINE request includes the photo you take, sent to identify the equipment.</p>
+  <p>Anthropic processes each request to generate the response. Under their standard API terms, inputs and outputs (including any photo you send via SCAN MACHINE) may be retained for up to 30 days by default for trust and safety monitoring, after which they are deleted. Anthropic does not use this data to train their models. For the current retention terms see <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">anthropic.com/legal/privacy</a>.</p>
 
   <h2>2. Google AdMob — ads in store builds <span class="tag tag-store">STORE</span></h2>
   <p>The <strong>WEB edition has no ads and uses no ad SDK</strong>. Store builds include <a href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener">Google AdMob</a> for banner ads. The AdMob SDK collects, at minimum:</p>
@@ -66,7 +66,7 @@
     <li>Coarse location derived from your IP address.</li>
     <li>Ad interaction events (which ad was shown, whether you tapped it).</li>
   </ul>
-  <p>On first launch of a store build, we show either Apple's App Tracking Transparency prompt (iOS) or Google's User Messaging Platform consent form (Android), as required by region. You can choose personalized or non-personalized ads, and you can change your choice later in your device settings or from the HELP tab.</p>
+  <p>On first launch of a store build, we show either Apple's App Tracking Transparency prompt (iOS) or Google's User Messaging Platform consent form (Android), as required by region. You can choose personalized or non-personalized ads, and you can change your choice later in your device settings: Android → Settings → Privacy → Ads; iOS → Settings → Privacy &amp; Security → Tracking.</p>
   <p>Google's privacy policy applies to the data processed by the AdMob SDK: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a>.</p>
 
   <h2>3. YouTube embeds — only if you link a video</h2>
@@ -95,7 +95,7 @@
     <li>Export your data (<code>💾</code> button).</li>
     <li>Delete your API key (<code>⚙</code> icon).</li>
     <li>Revoke AI data-sharing consent (HELP tab → "AI Data Sharing").</li>
-    <li>Change your ad personalization choice (device Settings → Privacy → Advertising, or OS-level ATT/UMP controls).</li>
+    <li>Change your ad personalization choice in OS settings (Android: Settings → Privacy → Ads; iOS: Settings → Privacy &amp; Security → Tracking).</li>
     <li>Delete the app, which deletes all local data on that device.</li>
   </ul>
   <p>Under GDPR (EU), CCPA (California), and similar laws, you have the right to access, correct, delete, or receive a copy of personal data about you. Because 90Strong's app code does not transmit personal data to any server we control, those requests are satisfied by the export + delete options above. For data collected by Anthropic or Google AdMob, exercise those rights through their own services.</p>
@@ -108,7 +108,7 @@
 
   <a href="./" class="back">← Back to the app</a>
 
-  <div class="updated">Last updated: October 26, 2026</div>
+  <div class="updated">Last updated: November 16, 2026</div>
 </div>
 </body>
 </html>
